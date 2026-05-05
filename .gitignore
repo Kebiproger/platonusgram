@@ -1,2 +1,11 @@
 .env
 last_grades.json
+venv/
+.venv
+*.pyc
+.idea/
+.vscode/
+*.db
+__pycache__/
+.devcontainer
+
