@@ -7,4 +7,4 @@ venv/
 .vscode/
 *.db
 __pycache__/
-.devcontainer
+.devcontainer/
