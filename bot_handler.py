@@ -77,4 +77,4 @@ async def cmd_grades(message: Message):
 def create_login_link(telegram_id: int) -> str:
     token = secrets.token_urlsafe(32)
     active_tokens[token] = telegram_id
-    return f"{URL}:8000/login?token={token}"
+    return f"{URL}/login?token={token}"
