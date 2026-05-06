@@ -26,8 +26,16 @@ Telegram-бот для автоматического получения и от
 Создайте файл `.env` в корневой папке проекта и добавьте туда следующие переменные:
 ```env
 TELEGRAM_TOKEN=твой_токен_от_BotFather
-PLATONUS_LOGIN=твой_логин_в_платонусе
-PLATONUS_PASSWORD=твой_пароль_в_платонусе
+SERVER_URL=ссылка вашего сервера
+FERNET_KEY=твой_fernet_ключ
+```
+
+### 1.1 Генерация Fernet-ключа
+Если код использует Fernet для шифрования, сгенерируйте ключ командой:
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+Скопируйте результат в `FERNET_KEY`.
 ```
 
 ### 2. Запуск локально (без Docker)
