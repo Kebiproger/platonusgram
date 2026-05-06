@@ -1,5 +1,5 @@
 from aiogram import Router, F, types
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from parser import get_platonus_grades
@@ -8,27 +8,9 @@ from crypto import decrypt_password
 from web_server import active_tokens
 import secrets
 from config import URL
+from keyboards import get_main_kb, get_start_kb
 
 router = Router()
-
-# --- МЕТОДОЛОГИЯ КЛАВИАТУР ---
-
-def get_main_kb():
-    """Клавиатура для авторизованного пользователя"""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🎓 Узнать оценки")]],
-        resize_keyboard=True,
-        persistent=True  # Кнопка не будет прятаться под иконку
-    )
-
-def get_start_kb():
-    """Клавиатура для новичка"""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔑 Войти")]],
-        resize_keyboard=True
-    )
-
-# --- ОБРАБОТЧИКИ ---
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
