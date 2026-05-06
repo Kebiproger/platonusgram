@@ -32,7 +32,7 @@ async def cmd_start(message: Message):
 ⚠️ Проект создан студентами для студентов и не является официальным ботом университета.
 
 Чтобы начать получать уведомления об оценках, нажми кнопку ниже и авторизуйся в системе (это нужно сделать всего один раз):''',
-    reply_markup=main_keyboard
+    reply_markup=start_keyboard
     )   
 
 @router.message(Command("login"))
