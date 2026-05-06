@@ -2,6 +2,7 @@ from aiohttp import web
 import secrets
 from crypto import encrypt_password
 from db_api import save_user, init_db
+import os
 # Временное хранилище токенов (в идеале использовать Redis, но для начала хватит словаря)
 # Формат: { "token_string": telegram_id }
 active_tokens = {}
@@ -16,18 +17,12 @@ async def handle_login_get(request):
         return web.Response(text="Ошибка: Ссылка недействительна или устарела.", status=403)
     
     # 3. Если всё ок, отдаем HTML-форму (строкой)
-    html_content = f"""
-    <html>
-        <body>
-            <h2>Авторизация в Platonus</h2>
-            <form action="/login?token={token}" method="post">
-                <input type="text" name="username" placeholder="Логин" required><br>
-                <input type="password" name="password" placeholder="Пароль" required><br>
-                <button type="submit">Войти</button>
-            </form>
-        </body>
-    </html>
-    """
+    try:
+        with open('Platonus.html', 'r', encoding='utf-8') as f:
+            html_content = f.read()
+    except FileNotFoundError:
+        return web.Response(text="Ошибка: Файл формы не найден.", status=500)
+    
     return web.Response(text=html_content, content_type='text/html')
 
 # --- ПРИЕМ ДАННЫХ ОТ ПОЛЬЗОВАТЕЛЯ (POST-запрос) ---
@@ -42,10 +37,12 @@ async def handle_login_post(request):
     
     # 2. Получаем данные из HTML-формы
     data = await request.post()
-    username = data.get('username')
+    username = data.get('login')
     password = data.get('password')
     
-    # ТУТ БУДЕТ МАГИЯ:
+    if not username or not password:
+        return web.Response(text="Ошибка: Все поля должны быть заполнены.", status=400)
+    
     password_enc = encrypt_password(password)
     save_user(user_id, username, password_enc)
     
@@ -61,4 +58,8 @@ def setup_web_app():
     # Регистрируем маршруты
     app.router.add_get('/login', handle_login_get)
     app.router.add_post('/login', handle_login_post)
+
+    if os.path.exists('Platonus_files'):
+        app.router.add_static('/Platonus_files', 'Platonus_files')
+
     return app

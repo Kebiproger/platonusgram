@@ -1,0 +1,69 @@
+/* ! For .layout-navbar-fixed added fix padding top tpo .layout-page */
+/* Detached navbar */
+.layout-navbar-fixed .layout-wrapper:not(.layout-horizontal):not(.layout-without-menu) .layout-page {
+    padding-top: 76px !important;
+}
+/* Default navbar */
+.layout-navbar-fixed .layout-wrapper:not(.layout-without-menu) .layout-page {
+    padding-top: 64px !important;
+}
+
+/* Navbar page z-index issue solution */
+.content-wrapper .navbar {
+    z-index: auto;
+}
+
+.filter-expand-button i[class*='bx-filter'] {
+    transform: translateY(-2px) rotate(180deg);
+    transition: transform .5s;
+}
+
+.filter-expand-button.collapsed i[class*='bx-filter'] {
+    transform: translateY(2px);
+}
+
+.plt-sticky-bottom {
+    position: sticky;
+    bottom: 3.25rem;
+    margin-top: 1rem;
+    z-index: 1089;
+}
+
+label.required-field:after {
+    content: "\00a0*";
+    color: red;
+    font-weight: bold;
+}
+
+.select2-search--inline {
+    display: contents; /*this will make the container disappear, making the child the one who sets the width of the element*/
+}
+
+.select2-search__field:placeholder-shown {
+    width: 100% !important; /*makes the placeholder to be 100% of the width while there are no options selected*/
+}
+.clickable {
+    cursor: pointer;
+}
+.cursor-not-allowed {
+    cursor: not-allowed;
+}
+
+.plt-disabled {
+    pointer-events: none;
+    opacity: 0.6;
+}
+.plt-form-disabled {
+    pointer-events: none;
+    background-color: #eceef1 !important;
+}
+
+.table > tbody > tr.unprofitable-row > td {
+    --bs-table-accent-bg: #87D37C;
+    background-color: #87D37C;
+}
+
+.table > tbody > tr.overcrowded-row > td {
+    --bs-table-accent-bg: #EF9A9A;
+    background-color: #EF9A9A;
+}
