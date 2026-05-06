@@ -3,6 +3,7 @@ import secrets
 from crypto import encrypt_password
 from db_api import save_user, init_db
 import os
+from bot_handler import get_main_kb
 # Временное хранилище токенов (в идеале использовать Redis, но для начала хватит словаря)
 # Формат: { "token_string": telegram_id }
 active_tokens = {}
@@ -46,11 +47,21 @@ async def handle_login_post(request):
     password_enc = encrypt_password(password)
     save_user(user_id, username, password_enc)
     
-    # 3. Уничтожаем токен, чтобы ссылка стала недействительной
+    try:
+        await bot.send_message(
+            user_id, 
+            "✅ **Авторизация прошла успешно!**\n\n"
+            "Теперь ты можешь проверять свои оценки прямо в меню ниже.",
+            reply_markup=get_main_kb(), # Та самая кнопка "Узнать оценки"
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Ошибка отправки уведомления: {e}")
+
+    # 3. Уничтожаем токен
     del active_tokens[token]
     
-    return web.Response(text="Успешно! Данные зашифрованы. Можете закрыть страницу и вернуться в Telegram.")
-
+    return web.Response(text="Успешно! Возвращайтесь в Telegram.")
 # --- ЗАПУСК СЕРВЕРА ---
 def setup_web_app():
     init_db()  # Инициализируем базу данных при старте сервера
