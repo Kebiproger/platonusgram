@@ -3,7 +3,6 @@ from crypto import encrypt_password
 from db_api import save_user, init_db
 import os
 from bot_handler import get_main_kb
-from main import bot
 
 # Временное хранилище токенов (в идеале использовать Redis, но для начала хватит словаря)
 # Формат: { "token_string": telegram_id }
@@ -48,6 +47,7 @@ async def handle_login_post(request):
     password_enc = encrypt_password(password)
     save_user(user_id, username, password_enc)
     
+    bot = request.app['bot']  # Получаем объект бота из контекста приложения
     try:
         await bot.send_message(
             user_id, 
