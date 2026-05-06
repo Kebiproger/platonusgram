@@ -2,7 +2,12 @@ from aiogram import Router, F, types
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-# Твои импорты...
+from parser import get_platonus_grades
+from db_api import get_user
+from crypto import decrypt_password 
+from web_server import active_tokens
+import secrets
+from config import URL
 
 router = Router()
 
@@ -76,3 +81,11 @@ async def cmd_grades(message: Message):
     
     grades_text = await get_platonus_grades(username, password)
     await loading_message.edit_text(grades_text, parse_mode="HTML")
+
+def create_login_link(telegram_id: int) -> str:
+
+    token = secrets.token_urlsafe(32)
+
+    active_tokens[token] = telegram_id
+
+    return f"{URL}/login?token={token}" 

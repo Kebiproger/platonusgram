@@ -1,9 +1,10 @@
 from aiohttp import web
-import secrets
 from crypto import encrypt_password
 from db_api import save_user, init_db
 import os
 from bot_handler import get_main_kb
+from main import bot
+
 # Временное хранилище токенов (в идеале использовать Redis, но для начала хватит словаря)
 # Формат: { "token_string": telegram_id }
 active_tokens = {}

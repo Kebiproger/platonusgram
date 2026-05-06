@@ -18,5 +18,6 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', 8000)
     await site.start()
     await dp.start_polling(bot)
+
 if __name__ == "__main__":
     asyncio.run(main())
