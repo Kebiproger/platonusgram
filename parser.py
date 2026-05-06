@@ -1,9 +1,9 @@
 import httpx
 from bs4 import BeautifulSoup
-from config import LOGIN, PASSWORD 
+# from config import LOGIN, PASSWORD 
 
 
-async def get_platonus_grades():
+async def get_platonus_grades(login, password):
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json, text/plain, */*",
@@ -14,12 +14,21 @@ async def get_platonus_grades():
         
         try:
             print(f"🔑 Авторизация...")
-            await client.post(login_url, json={"login": LOGIN, "password": PASSWORD})
+            login_resp = await client.post(login_url, json={"login": login, "password": password})
+            print(f"DEBUG: login status = {login_resp.status_code}")
             
             # Определение текущего семестра
             resp = await client.get("https://platonus.iitu.edu.kz/student_register")
+            print(f"DEBUG: register status = {resp.status_code}, url = {resp.url}")
+            
             soup = BeautifulSoup(resp.text, "html.parser")
-            sid = soup.find("input", {"name": "studentID"})["value"]
+            student_id_input = soup.find("input", {"name": "studentID"})
+            
+            if not student_id_input:
+                print("DEBUG: Part of HTML:", resp.text[:500])
+                return "❌ Ошибка авторизации: неверный логин/пароль или сессия не сохранилась."
+                
+            sid = student_id_input["value"]
             year = soup.find("select", {"id": "year"}).find("option", selected=True)["value"]
             term = soup.find("select", {"name": "term"}).find("option", selected=True)["value"]
             
@@ -29,10 +38,6 @@ async def get_platonus_grades():
             response.raise_for_status()
             
             data = response.json()
-            
-            print("\n" + "="*80)
-            print(f"{'ДИСЦИПЛИНА':<45} | {'ОЦЕНКИ'}")
-            print("="*80)
 
             result_text = "📊 <b>Ваши текущие оценки:</b>\n\n"
             for subject in data:

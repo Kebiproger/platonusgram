@@ -1,7 +1,13 @@
-from aiogram import Router, F
+from aiogram import Router, F, types
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from parser import get_platonus_grades
+from config import URL
+import secrets
+from web_server import active_tokens
+from db_api import get_user
+from crypto import decrypt_password
 
 router = Router()
 main_keyboard= ReplyKeyboardMarkup(
@@ -18,9 +24,45 @@ async def cmd_start(message: Message):
     reply_markup=main_keyboard
     )   
 
+@router.message(Command("login"))
+async def cmd_login(message: types.Message):
+    # 1. ГЕНЕРАЦИЯ: Вызываем твою функцию и передаем ей ID пользователя.
+    # Она возвращает готовую ссылку: http://твой_ip/login?token=a1b2...
+    login_url = create_login_link(message.from_user.id)
+    
+    # 2. УПАКОВКА: Создаем красивую кнопку (Inline-кнопка под сообщением)
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(
+        text="🔑 Войти в Platonus", 
+        url=login_url  # Вшиваем нашу сгенерированную ссылку в кнопку!
+    ))
+    
+    # 3. ОТПРАВКА: Бот отправляет текст и прикрепляет к нему кнопку
+    await message.answer(
+        "Нажмите на кнопку ниже, чтобы безопасно ввести пароль.\n"
+        "Ссылка одноразовая и сгорит после использования!",
+        reply_markup=builder.as_markup()
+    )
+
 @router.message(Command("grades"))
 @router.message(F.text == "🎓 Узнать оценки")
 async def cmd_grades(message: Message):
+    
     loading_message = await message.answer("⏳ Получаю твои оценки...")
-    grades_text = await get_platonus_grades()
+    row = get_user(message.from_user.id)
+    
+    if not row:
+        await loading_message.edit_text("❌ Вы не авторизованы! Наберите /login и перейдите по ссылке.")
+        return
+        
+    username, password_enc = row
+    password = decrypt_password(password_enc)
+    print(f"DEBUG: auth grades for {username}, password dec: {bool(password)}")
+    
+    grades_text = await get_platonus_grades(username, password)
     await loading_message.edit_text(grades_text, parse_mode="HTML")
+
+def create_login_link(telegram_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    active_tokens[token] = telegram_id
+    return f"{URL}:8000/login?token={token}"
