@@ -17,14 +17,26 @@ main_keyboard= ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+start_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="🔑 Войти")]],
+    resize_keyboard=True
+)
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    await message.answer("Привет! Я бот для проверки оценок в Платонусе. Отправь /grades, чтобы узнать свои оценки.",
+    await message.answer('''👋 Привет! Я — твой независимый ассистент для учебы.
+
+Я избавлю тебя от необходимости постоянно проверять портал. Я буду сам следить за твоим журналом и расписанием, а ты сможешь сфокусироваться на главном.
+
+⚠️ Проект создан студентами для студентов и не является официальным ботом университета.
+
+Чтобы начать получать уведомления об оценках, нажми кнопку ниже и авторизуйся в системе (это нужно сделать всего один раз):''',
     reply_markup=main_keyboard
     )   
 
 @router.message(Command("login"))
+@router.message(F.text == "🔑 Войти")
 async def cmd_login(message: types.Message):
     # 1. ГЕНЕРАЦИЯ: Вызываем твою функцию и передаем ей ID пользователя.
     # Она возвращает готовую ссылку: http://твой_ip/login?token=a1b2...
