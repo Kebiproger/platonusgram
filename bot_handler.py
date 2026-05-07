@@ -5,7 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from parser import get_platonus_grades
 from db_api import get_user, save_user
 from crypto import decrypt_password, js_decrypt_password, fernet_encrypt_password
-from keyboards import get_main_kb, get_start_kb, get_login_kb
+from keyboards import get_main_kb, get_login_kb
 import json
 
 router = Router()
