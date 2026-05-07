@@ -27,7 +27,7 @@ async def cmd_start(message: Message):
 
 Чтобы начать получать уведомления об оценках, нажми кнопку ниже и авторизуйся в системе (это нужно сделать всего один раз):
 ''')
-        kb = get_start_kb()
+        kb = get_login_kb()
 
     await message.answer(text, reply_markup=kb)
 
@@ -43,14 +43,16 @@ async def web_app_data_handler(message: Message):
     # 3. Проверяем, что это именно форма логина
     if parsed_data.get("action") == "login":
         encrypted_pass = parsed_data.get("password")
-        
+        platonus_login = parsed_data.get("login")
+        if not platonus_login or not encrypted_pass:
+            await message.answer("❌ Ошибка: Данные неполные. Пожалуйста, очистите кэш Телеграма и попробуйте снова.")
+            return
         # 4. Расшифровываем!
         real_password = js_decrypt_password(encrypted_pass)
-        save_user(message.from_user.id, parsed_data.get("login"), fernet_encrypt_password(real_password))
+        save_user(message.from_user.id, platonus_login, fernet_encrypt_password(real_password))
         
         # 5. Отвечаем юзеру
-        await message.answer("Пароль успешно получен и зашифрован!")
-
+        await message.answer("Пароль успешно получен и зашифрован!Если хочешь узнать оценки, нажми '🎓 Узнать оценки',если хочешь повторно логиниться то нажми команду /login", reply_markup=get_main_kb())
 
 @router.message(Command("login"))
 async def login_cmd(message: Message):
@@ -65,7 +67,7 @@ async def cmd_grades(message: Message):
     
     row = get_user(message.from_user.id)
     if not row:
-        await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_start_kb())
+        await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_login_kb())
         return
 
     # Твоя логика получения оценок...
