@@ -3,12 +3,10 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from parser import get_platonus_grades
-from db_api import get_user
-from crypto import decrypt_password 
-from web_server import active_tokens
-import secrets
-from config import URL
-from keyboards import get_main_kb, get_start_kb
+from db_api import get_user, save_user
+from crypto import decrypt_password, js_decrypt_password, fernet_encrypt_password
+from keyboards import get_main_kb, get_start_kb, get_login_kb
+import json
 
 router = Router()
 
@@ -33,18 +31,30 @@ async def cmd_start(message: Message):
 
     await message.answer(text, reply_markup=kb)
 
+@router.message(F.web_app_data)
+async def web_app_data_handler(message: Message):
+    
+    # 1. Достаем ту самую JSON-строку, которую мы отправили из JS
+    raw_data = message.web_app_data.data
+    
+    # 2. Превращаем строку в словарь Python
+    parsed_data = json.loads(raw_data)
+    
+    # 3. Проверяем, что это именно форма логина
+    if parsed_data.get("action") == "login":
+        encrypted_pass = parsed_data.get("password")
+        
+        # 4. Расшифровываем!
+        real_password = js_decrypt_password(encrypted_pass)
+        save_user(message.from_user.id, parsed_data.get("login"), fernet_encrypt_password(real_password))
+        
+        # 5. Отвечаем юзеру
+        await message.answer("Пароль успешно получен и зашифрован!")
+
+
 @router.message(Command("login"))
-@router.message(F.text == "🔑 Войти")
-async def cmd_login(message: Message):
-    login_url = create_login_link(message.from_user.id)
-    
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🔑 Перейти к авторизации", url=login_url))
-    
-    await message.answer(
-        "Безопасный вход: ссылка откроется в браузере и сгорит после ввода пароля.",
-        reply_markup=builder.as_markup()
-    )
+async def login_cmd(message: Message):
+    await message.answer("Нажми на кнопку ниже, чтобы безопасно ввести пароль:", reply_markup=get_login_kb())
 
 @router.message(F.text == "🎓 Узнать оценки")
 async def cmd_grades(message: Message):
@@ -62,12 +72,9 @@ async def cmd_grades(message: Message):
     password = decrypt_password(password_enc)
     
     grades_text = await get_platonus_grades(username, password)
-    await loading_message.edit_text(grades_text, parse_mode="HTML")
-
-def create_login_link(telegram_id: int) -> str:
-
-    token = secrets.token_urlsafe(32)
-
-    active_tokens[token] = telegram_id
-
-    return f"{URL}/login?token={token}" 
+    try:
+        await loading_message.edit_text(grades_text, parse_mode="HTML")
+    except Exception as e:
+        print(f"⚠️ Не удалось отредактировать сообщение: {e}")
+        # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
+        await message.answer(grades_text, parse_mode="HTML")

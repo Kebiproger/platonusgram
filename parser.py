@@ -1,5 +1,6 @@
 import httpx
 from bs4 import BeautifulSoup
+import html
 # from config import LOGIN, PASSWORD 
 
 
@@ -29,8 +30,14 @@ async def get_platonus_grades(login, password):
                 return "❌ Ошибка авторизации: неверный логин/пароль или сессия не сохранилась."
                 
             sid = student_id_input["value"]
-            year = soup.find("select", {"id": "year"}).find("option", selected=True)["value"]
-            term = soup.find("select", {"name": "term"}).find("option", selected=True)["value"]
+            year_option = soup.find("select", {"id": "year"}).find("option", selected=True)
+            term_option = soup.find("select", {"name": "term"}).find("option", selected=True)
+            
+            if not year_option or not term_option:
+                return "❌ Ошибка: Не удалось определить текущий год или семестр."
+
+            year = year_option["value"]
+            term = term_option["value"]
             
             print(f"📡 Получение оценок ({year}, семестр {term})...")
             grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{sid}"
@@ -42,22 +49,29 @@ async def get_platonus_grades(login, password):
             result_text = "📊 <b>Ваши текущие оценки:</b>\n\n"
             for subject in data:
                 full_name = subject.get("subjectName", "Неизвестно")
-                name = full_name.split('(')[0].strip()
+                name = html.escape(full_name.split('(')[0].strip())
                 
                 marks_list = []
                 exams = subject.get("exams", [])
                 for ex in exams:
-                    ex_name = ex.get("name")
-                    ex_mark = ex.get("mark")
+                    ex_name = html.escape(ex.get("name", "Элемент"))
+                    ex_mark = html.escape(str(ex.get("mark", "")))
                     if ex_mark and ex_mark != "-":
                         marks_list.append(f"  ▫️ <i>{ex_name}</i>: <b>{ex_mark}</b>")
                 
+                subject_text = f"📚 <b>{name}</b>\n"
                 if marks_list:
-                    marks_str = "\n".join(marks_list)
+                    subject_text += "\n".join(marks_list)
                 else:
-                    marks_str = "  ▫️ <i>Нет оценок</i>"
+                    subject_text += "  ▫️ <i>Нет оценок</i>"
+                subject_text += "\n\n"
                 
-                result_text += f"📚 <b>{name}</b>\n{marks_str}\n\n"
+                # Проверка на лимит сообщения (4096 символов)
+                if len(result_text) + len(subject_text) > 4000:
+                    result_text += "⚠️ <i>...и другие (слишком много оценок)</i>"
+                    break
+                
+                result_text += subject_text
 
             # Возвращаем накопленный текст боту
             return result_text
@@ -65,10 +79,9 @@ async def get_platonus_grades(login, password):
         except httpx.HTTPStatusError as e:
             return f"❌ Ошибка сервера Platonus:\nСтатус-код: {e.response.status_code}\nURL: {e.request.url}"
         except AttributeError as e:
-            return f"❌ Ошибка парсинга HTML (возможно, неверный логин/пароль или сайт изменился):\nПодробности: Не удалось найти элемент на странице. {e}"
+            return f"❌ Ошибка парсинга HTML (возможно, сайт изменился):\nПодробности: {html.escape(str(e))}"
         except Exception as e:
             import traceback
-            # Получаем детальный лог ошибки с указанием строки
             error_trace = traceback.format_exc()
-            print("ПОЛНАЯ ОШИБКА:\n", error_trace) # Выведет в терминал
-            return f"❌ Неизвестная ошибка: {type(e).__name__}\n{str(e) or 'Нет описания ошибки. Смотри терминал.'}"
+            print("ПОЛНАЯ ОШИБКА:\n", error_trace)
+            return f"❌ Неизвестная ошибка: {type(e).__name__}\n{html.escape(str(e)) or 'Нет описания.'}"

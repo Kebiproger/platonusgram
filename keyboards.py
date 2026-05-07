@@ -1,4 +1,5 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+import aiogram.types.web_app_info as WebAppInfo
 
 def get_main_kb():
     """Клавиатура для авторизованного пользователя"""
@@ -14,3 +15,10 @@ def get_start_kb():
         keyboard=[[KeyboardButton(text="🔑 Войти")]],
         resize_keyboard=True
     )
+
+def get_login_kb():
+    web_app_btn = KeyboardButton(
+        text="🔑 Ввести пароль",
+        web_app=WebAppInfo(url="https://kebiproger.github.io/platonus.iitu.edu.kz/")
+    )
+    return ReplyKeyboardMarkup(keyboard=[[web_app_btn]], resize_keyboard=True)
