@@ -1,9 +1,9 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_main_kb():
     """Клавиатура для авторизованного пользователя"""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🎓 Узнать оценки")]],
+    return InlineKeyboardMarkup(
+        keyboard=[[InlineKeyboardButton(text="🎓 Узнать оценки", callback_data="grades")]],
         resize_keyboard=True,
         persistent=True  # Кнопка не будет прятаться под иконку
     )

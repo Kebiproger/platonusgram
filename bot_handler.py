@@ -1,7 +1,6 @@
-from aiogram import Router, F, types
-from aiogram.types import Message
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from parser import get_platonus_grades
 from db_api import get_user, save_user
 from crypto import decrypt_password, js_decrypt_password, fernet_encrypt_password
@@ -40,8 +39,6 @@ async def web_app_data_handler(message: Message):
     # 2. Превращаем строку в словарь Python
     parsed_data = json.loads(raw_data)
     
-    # 3. Проверяем, что это именно форма логина
-    print(f"🚨 РЕНТГЕН: Прилетели данные: {parsed_data}")
     if parsed_data.get("action") == "login":
         encrypted_pass = parsed_data.get("password")
         platonus_login = parsed_data.get("login")
@@ -60,13 +57,15 @@ async def login_cmd(message: Message):
     login_kb = get_login_kb()
     await message.answer("Нажми на кнопку ниже, чтобы безопасно ввести пароль:", reply_markup=login_kb)
 
-@router.message(F.text == "🎓 Узнать оценки")
-async def cmd_grades(message: Message):
+# @router.message(Command("grades"))
+@router.callback_query(F.data == "grades")
+async def cmd_grades(callback: CallbackQuery):
+    await callback.answer()
     # Важный момент: всегда отправляем актуальную клавиатуру в ответе, 
     # чтобы она "закрепилась" у пользователя
-    loading_message = await message.answer("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
+    loading_message = await callback.message.edit_text("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
     
-    row = get_user(message.from_user.id)
+    row = get_user(callback.from_user.id)
     if not row:
         await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_login_kb())
         return
@@ -81,4 +80,4 @@ async def cmd_grades(message: Message):
     except Exception as e:
         print(f"⚠️ Не удалось отредактировать сообщение: {e}")
         # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
-        await message.answer(grades_text, parse_mode="HTML")
+        await callback.message.answer(grades_text, parse_mode="HTML")

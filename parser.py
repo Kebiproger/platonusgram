@@ -1,13 +1,17 @@
 import httpx
 from bs4 import BeautifulSoup
 import html
+import fake_useragent
 # from config import LOGIN, PASSWORD 
 
 
 async def get_platonus_grades(login, password):
+    ua=fake_useragent.UserAgent()
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json, text/plain, */*",
+        "User-Agent": ua.random,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Connection": "keep-alive"
     }
 
     async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
