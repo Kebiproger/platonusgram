@@ -54,6 +54,7 @@ async def web_app_data_handler(message: Message):
 
 @router.message(Command("login"))
 async def login_cmd(message: Message):
+    login_kb = get_login_kb()
     await message.answer("Нажми на кнопку ниже, чтобы безопасно ввести пароль:", reply_markup=get_login_kb())
 
 @router.message(F.text == "🎓 Узнать оценки")
