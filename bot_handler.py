@@ -41,6 +41,7 @@ async def web_app_data_handler(message: Message):
     parsed_data = json.loads(raw_data)
     
     # 3. Проверяем, что это именно форма логина
+    print(f"🚨 РЕНТГЕН: Прилетели данные: {parsed_data}")
     if parsed_data.get("action") == "login":
         encrypted_pass = parsed_data.get("password")
         platonus_login = parsed_data.get("login")
