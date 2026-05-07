@@ -1,5 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-import aiogram.types.web_app_info as WebAppInfo
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 def get_main_kb():
     """Клавиатура для авторизованного пользователя"""
