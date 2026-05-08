@@ -9,3 +9,4 @@ venv/
 __pycache__/
 .devcontainer/
 unit-test.py
+private.pem

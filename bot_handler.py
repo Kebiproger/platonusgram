@@ -57,7 +57,7 @@ async def login_cmd(message: Message):
     login_kb = get_login_kb()
     await message.answer("Нажми на кнопку ниже, чтобы безопасно ввести пароль:", reply_markup=login_kb)
 
-# @router.message(Command("grades"))
+@router.message(Command("grades"))
 @router.callback_query(F.data == "grades")
 async def cmd_grades(callback: CallbackQuery):
     await callback.answer()
