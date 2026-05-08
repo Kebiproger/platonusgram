@@ -13,7 +13,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS users (
                 telegram_id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL,
-                password_enc TEXT NOT NULL
+                password_enc TEXT NOT NULL,
+                session_cookie TEXT
             );
             """
         )

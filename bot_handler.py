@@ -6,9 +6,10 @@ from db_api import get_user, save_user
 from crypto import decrypt_password, js_decrypt_password, fernet_encrypt_password
 from keyboards import get_main_kb, get_login_kb
 import json
+import logging
 
 router = Router()
-
+logger = logging.getLogger(__name__)
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     # Проверяем, есть ли юзер в БД
@@ -63,6 +64,7 @@ async def cmd_grades(callback: CallbackQuery):
     await callback.answer()
     # Важный момент: всегда отправляем актуальную клавиатуру в ответе, 
     # чтобы она "закрепилась" у пользователя
+    logger.info(f"Юзер {callback.from_user.id} запросил оценки.")
     loading_message = await callback.message.edit_text("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
     
     row = get_user(callback.from_user.id)
@@ -78,6 +80,6 @@ async def cmd_grades(callback: CallbackQuery):
     try:
         await loading_message.edit_text(grades_text, parse_mode="HTML")
     except Exception as e:
-        print(f"⚠️ Не удалось отредактировать сообщение: {e}")
+        logger.error(f"Не смог спарсить оценки для {callback.from_user.id}: {e}", exc_info=True)
         # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
         await callback.message.answer(grades_text, parse_mode="HTML")

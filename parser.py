@@ -2,7 +2,11 @@ import httpx
 from bs4 import BeautifulSoup
 import html
 import fake_useragent
-# from config import LOGIN, PASSWORD 
+import logging
+import json
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 
 async def get_platonus_grades(login, password):
@@ -18,21 +22,27 @@ async def get_platonus_grades(login, password):
         login_url = "https://platonus.iitu.edu.kz/rest/api/login"
         
         try:
-            print(f"🔑 Авторизация...")
+            logger.info(f"🔑 Авторизация...")
             login_resp = await client.post(login_url, json={"login": login, "password": password})
-            print(f"DEBUG: login status = {login_resp.status_code}")
+            logger.info(f"DEBUG: login status = {login_resp.status_code}")
             
             # Определение текущего семестра
             resp = await client.get("https://platonus.iitu.edu.kz/student_register")
-            print(f"DEBUG: register status = {resp.status_code}, url = {resp.url}")
+            logger.info(f"DEBUG: register status = {resp.status_code}, url = {resp.url}")
             
             soup = BeautifulSoup(resp.text, "html.parser")
             student_id_input = soup.find("input", {"name": "studentID"})
             
             if not student_id_input:
-                print("DEBUG: Part of HTML:", resp.text[:500])
+                logger.info(f"DEBUG: Part of HTML: {resp.text[:500]}")
                 return "❌ Ошибка авторизации: неверный логин/пароль или сессия не сохранилась."
-                
+            if student_id_input: # Замени на свою проверку
+            # 3. ВЫТАСКИВАЕМ КУКИ! 
+                cookies_dict = dict(client.cookies)
+                # Превращаем словарь в строку, чтобы сохранить в БД
+                cookie_string = json.dumps(cookies_dict)
+                 
+
             sid = student_id_input["value"]
             year_option = soup.find("select", {"id": "year"}).find("option", selected=True)
             term_option = soup.find("select", {"name": "term"}).find("option", selected=True)
@@ -43,7 +53,7 @@ async def get_platonus_grades(login, password):
             year = year_option["value"]
             term = term_option["value"]
             
-            print(f"📡 Получение оценок ({year}, семестр {term})...")
+            logger.info(f"📡 Получение оценок ({year}, семестр {term})...")
             grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{sid}"
             response = await client.get(grades_api_url)
             response.raise_for_status()
@@ -87,5 +97,5 @@ async def get_platonus_grades(login, password):
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            print("ПОЛНАЯ ОШИБКА:\n", error_trace)
+            logger.error(f"ПОЛНАЯ ОШИБКА:\n{error_trace}", exc_info=True)
             return f"❌ Неизвестная ошибка: {type(e).__name__}\n{html.escape(str(e)) or 'Нет описания.'}"
