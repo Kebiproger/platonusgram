@@ -1,11 +1,21 @@
 import asyncio
-from aiogram import Bot, Dispatcher
-from config import TELEGRAM_TOKEN
-from bot_handler import router
-from db_api import init_db
-from commands import set_bot_commands
 import logging
 from logging.handlers import RotatingFileHandler
+
+from aiogram import Bot, Dispatcher
+from tortoise import Tortoise
+
+from bot_handler import router
+from commands import set_bot_commands
+from config import TELEGRAM_TOKEN
+
+
+class NoSleepFilter(logging.Filter):
+    def filter(self, record):
+        # Превращаем сообщение в нижний регистр и ищем слово "sleep"
+        # Если слова нет -> возвращаем True (пропускаем в лог)
+        # Если слово есть -> возвращаем False (блокируем сообщение)
+        return "Sleep" not in record.getMessage().lower()
 
 def setup_logging():
     # Создаем форматтер
@@ -26,24 +36,40 @@ def setup_logging():
     # Применяем настройки ко всему проекту
     logging.basicConfig(
         level=logging.INFO,
-        handlers=[console_handler, file_handler]
+        handlers=[console_handler, file_handler],
+        force=True  # Это нужно, чтобы переопределить базовую конфигурацию, если она уже была настроена
     )
+    logging.getLogger("aiogram").addFilter(NoSleepFilter())
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Создаем личный логгер для этого файла
 logger = logging.getLogger(__name__)
+
+async def init_db():
+    await Tortoise.init(
+        db_url='sqlite://database.db',
+        modules={'models' : ["models"]}
+    )
+    await Tortoise.generate_schemas()
+    logger.info("БД иницализировался!")
 
 async def main():
     setup_logging()
-    init_db()  # Инициализируем базу данных при старте бота
+    await init_db()  # Инициализируем базу данных при старте бота
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
     await set_bot_commands(bot)  # Устанавливаем команды бота в Telegram
     logger.info("🤖 Бот запущен. Ожидание команд...")
     await bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.gather(
-        dp.start_polling(bot),
-    )
+
+    try:
+        await asyncio.gather(
+            # Чтоб запускать много процессов одновременно
+            dp.start_polling(bot)
+        )
+    finally:
+        Tortoise.close_connections()
+        logger.info("Соединеие с БД закрыто")
 
 if __name__ == "__main__":
     asyncio.run(main())

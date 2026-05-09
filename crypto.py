@@ -1,15 +1,22 @@
-from cryptography.fernet import Fernet
-from config import FERNET_KEY
 import base64
+
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+
+from config import FERNET_KEY
 
 fernet = Fernet(FERNET_KEY)
 
 def fernet_encrypt_password(password: str) -> str:
     return fernet.encrypt(password.encode("utf-8")).decode("utf-8")
 
-def decrypt_password(password_enc: str) -> str:
+def fernet_decrypt_password(password_enc: str) -> str:
+    if not password_enc:
+        return ""
+    # Если данные были случайно сохранены как строка вида "b'token'"
+    if isinstance(password_enc, str) and password_enc.startswith("b'") and password_enc.endswith("'"):
+        password_enc = password_enc[2:-1]
     return fernet.decrypt(password_enc.encode("utf-8")).decode("utf-8")
 
 
@@ -26,7 +33,7 @@ def js_decrypt_password(encrypted_base64_string: str) -> str:
     try:
         # Библиотека JSEncrypt присылает данные в формате Base64, декодируем их
         encrypted_bytes = base64.b64decode(encrypted_base64_string)
-        
+
         # Расшифровываем приватным ключом
         decrypted_bytes = private_key.decrypt(
             encrypted_bytes,

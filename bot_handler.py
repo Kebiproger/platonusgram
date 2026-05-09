@@ -1,26 +1,56 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
-from parser import get_platonus_grades
-from db_api import get_user, save_user
-from crypto import decrypt_password, js_decrypt_password, fernet_encrypt_password
-from keyboards import get_main_kb, get_login_kb
+import contextlib
 import json
 import logging
 
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, Message
+
+from crypto import fernet_decrypt_password, fernet_encrypt_password, js_decrypt_password
+from keyboards import get_login_kb, get_main_kb
+from models import User
+from parser import get_platonus_grades
+
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+@router.message(Command("help"))
+async def help(message: Message):
+    return await message.answer('''
+    <b>🎓 Справочный центр бота</b>
+
+Я независимый бот-ассистент, который помогает быстро узнавать оценки из Платонуса без необходимости постоянно вводить логин и пароль.
+
+<b>🛠 Основные команды:</b>
+/start — Перезапустить бота
+/login — Авторизоваться (или обновить пароль)
+/grades — Узнать текущие оценки
+
+<b>❓ Частые вопросы (FAQ):</b>
+
+<b>1. Бот выдает ошибку авторизации. Что делать?</b>
+Скорее всего, ты изменил пароль в самом Платонусе. Просто нажми /login и введи данные заново.
+
+<b>2. Почему бот так долго грузит оценки?</b>
+Я запрашиваю данные напрямую с серверов университета. Если Платонус перегружен или "лежит", мне тоже требуется время на ответ. Пожалуйста, подожди 10-15 секунд.
+
+<b>3. Это безопасно? Вы украдете мой пароль?</b>
+Бот шифрует пароли современными алгоритмами (AES) и использует их только для автоматического входа на портал. Но помни: проект неофициальный, используй его на свое усмотрение.Подробнее в https://github.com/Kebiproger/platonusgram
+.
+''', parse_mode="HTML",disable_web_page_preview=True)
+
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     # Проверяем, есть ли юзер в БД
-    user = get_user(message.from_user.id)
-    
+    user = await User.get_or_none(telegram_id=message.from_user.id)
+
     if user:
         text = "✅ С возвращением! Ты уже в системе. Можешь проверять оценки."
         kb = get_main_kb()
     else:
         text = ('''👋 Привет! Я — твой независимый ассистент для учебы.
-                          
+
 Я избавлю тебя от необходимости постоянно проверять портал. Я буду сам следить за твоим журналом и расписанием, а ты сможешь сфокусироваться на главном.
 
 ⚠️ Проект создан студентами для студентов и не является официальным ботом университета.
@@ -33,13 +63,20 @@ async def cmd_start(message: Message):
 
 @router.message(F.web_app_data)
 async def web_app_data_handler(message: Message):
-    
+    # 🛡 ГАРАНТИЯ ДЛЯ PYLANCE: Если автора или данных нет — игнорируем
+    if not message.from_user or not message.web_app_data:
+        return
+
     # 1. Достаем ту самую JSON-строку, которую мы отправили из JS
     raw_data = message.web_app_data.data
-    
+
+    try:
     # 2. Превращаем строку в словарь Python
-    parsed_data = json.loads(raw_data)
-    
+        parsed_data = json.loads(raw_data)
+    except json.JSONDecodeError:
+        logger.warning(f"Получен кривой JSON от {message.from_user.id}: {raw_data}")
+        return await message.answer("❌ Ошибка передачи данных. Попробуйте снова.")
+
     if parsed_data.get("action") == "login":
         encrypted_pass = parsed_data.get("password")
         platonus_login = parsed_data.get("login")
@@ -47,11 +84,29 @@ async def web_app_data_handler(message: Message):
             await message.answer("❌ Ошибка: Данные неполные. Пожалуйста, очистите кэш Телеграма и попробуйте снова.")
             return
         # 4. Расшифровываем!
-        real_password = js_decrypt_password(encrypted_pass)
-        save_user(message.from_user.id, platonus_login, fernet_encrypt_password(real_password))
+
+        try:
+            real_password = js_decrypt_password(encrypted_pass)
+        except Exception as e:
+            logger.error(f"Ошибка расшифровки пароля WebApp: {e}")
+            return await message.answer("❌ Ошибка безопасности. Пароль поврежден при передаче.")
+        # user не нужен
+        encrypted_password = fernet_encrypt_password(real_password)
+
         
-        # 5. Отвечаем юзеру
-        await message.answer("Пароль успешно получен и зашифрован!Если хочешь узнать оценки, нажми '🎓 Узнать оценки',если хочешь повторно логиниться то нажми команду /login", reply_markup=get_main_kb())
+        user, created = await User.update_or_create(
+            telegram_id=message.from_user.id,
+            defaults={
+                "login": platonus_login,
+                "password_enc": encrypted_password
+            }
+        )
+
+        if created:
+            await message.answer("Пароль успешно получен и зашифрован!Если хочешь узнать оценки, нажми '🎓 Узнать оценки',если хочешь повторно логиниться то нажми команду /login", reply_markup=get_main_kb())
+        else:
+            await message.answer('С возвращением! Я обновил твои данные в базе, если они изменились.')
+
 
 @router.message(Command("login"))
 async def login_cmd(message: Message):
@@ -60,26 +115,44 @@ async def login_cmd(message: Message):
 
 @router.message(Command("grades"))
 @router.callback_query(F.data == "grades")
-async def cmd_grades(callback: CallbackQuery):
-    await callback.answer()
-    # Важный момент: всегда отправляем актуальную клавиатуру в ответе, 
+async def cmd_grades(event: CallbackQuery | Message):
+    if not event.from_user:
+        return
+    user_id = event.from_user.id
+    logger.info(f"Юзер {user_id} запросил оценки.")
+
+    if isinstance(event, CallbackQuery):
+        await event.answer()
+        loading_message = await event.message.edit_text("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
+    else:
+        loading_message = await event.answer("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
+    # Важный момент: всегда отправляем актуальную клавиатуру в ответе,
     # чтобы она "закрепилась" у пользователя
-    logger.info(f"Юзер {callback.from_user.id} запросил оценки.")
-    loading_message = await callback.message.edit_text("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
-    
-    row = get_user(callback.from_user.id)
-    if not row:
+
+    user = await User.get_or_none(telegram_id=user_id)
+    if not user:
         await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_login_kb())
         return
 
     # Твоя логика получения оценок...
-    username, password_enc = row
-    password = decrypt_password(password_enc)
+    login, password_enc = user.login, user.password_enc
+    password = fernet_decrypt_password(password_enc)
+
     
-    grades_text = await get_platonus_grades(username, password)
+
+    old_cookies = json.loads(user.session_cookie) if user.session_cookie else None
+
     try:
+        grades_text, new_cookies = await get_platonus_grades(login, password, old_cookies)
+
+        if new_cookies:
+            user.session_cookie = json.dumps(new_cookies)
+            await user.save()
+
         await loading_message.edit_text(grades_text, parse_mode="HTML")
     except Exception as e:
-        logger.error(f"Не смог спарсить оценки для {callback.from_user.id}: {e}", exc_info=True)
+        logger.error(f"Не смог спарсить оценки для {user_id}: {e}", exc_info=True)
         # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
-        await callback.message.answer(grades_text, parse_mode="HTML")
+        with contextlib.suppress(BaseException):
+            await loading_message.delete()
+        await event.bot.send_message(chat_id=user_id, text="⚠️ Ошибка при получении оценок.", parse_mode="HTML")
