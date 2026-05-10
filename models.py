@@ -15,7 +15,7 @@ class User(Model):
     session_cookie = fields.TextField(null=True) # Сюда будем класть JSON куки
 
     # Система кэширования
-    cached_grades = fields.TextField(null=True)
+    cached_grades = fields.JSONField(null=True)
     grades_updated_at = fields.DatetimeField(null=True) 
 
     # Защита от банов

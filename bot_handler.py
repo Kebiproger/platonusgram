@@ -7,9 +7,12 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from crypto import  fernet_encrypt_password, js_decrypt_password
-from keyboards import get_login_kb, get_main_kb
+from keyboards import get_login_kb, get_main_kb, get_subjects_kb, get_back_to_subjects_kb
 from models import User
 from parser import get_platonus_grades
+from datetime import timezone, timedelta, datetime
+from zoneinfo import ZoneInfo
+import hashlib
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -83,7 +86,6 @@ async def web_app_data_handler(message: Message):
         if not platonus_login or not encrypted_pass:
             await message.answer("❌ Ошибка: Данные неполные. Пожалуйста, очистите кэш Телеграма и попробуйте снова.")
             return
-        # 4. Расшифровываем!
 
         try:
             real_password = js_decrypt_password(encrypted_pass)
@@ -105,7 +107,7 @@ async def web_app_data_handler(message: Message):
         if created:
             await message.answer("Пароль успешно получен и зашифрован!Если хочешь узнать оценки, нажми '🎓 Узнать оценки',если хочешь повторно логиниться то нажми команду /login", reply_markup=get_main_kb())
         else:
-            await message.answer('С возвращением! Я обновил твои данные в базе, если они изменились.')
+            await message.answer('С возвращением! Я обновил твои данные в базе, если они изменились.', reply_markup=get_main_kb())
 
 
 @router.message(Command("login"))
@@ -113,38 +115,132 @@ async def login_cmd(message: Message):
     login_kb = get_login_kb()
     await message.answer("Нажми на кнопку ниже, чтобы безопасно ввести пароль:", reply_markup=login_kb)
 
+@router.message(F.text == "📊 Мои оценки")
 @router.message(Command("grades"))
 @router.callback_query(F.data == "grades")
 async def cmd_grades(event: CallbackQuery | Message):
-    if not event.from_user:
-        return
     user_id = event.from_user.id
     logger.info(f"Юзер {user_id} запросил оценки.")
-
-    if isinstance(event, CallbackQuery):
-        await event.answer()
-        loading_message = await event.message.edit_text("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
-    else:
-        loading_message = await event.answer("⏳ Соединяюсь с Platonus...", reply_markup=get_main_kb())
-    # Важный момент: всегда отправляем актуальную клавиатуру в ответе,
-    # чтобы она "закрепилась" у пользователя
-
+    force_update = False
     user = await User.get_or_none(telegram_id=user_id)
-    if not user or not user.login or not user.password_enc:
-        await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.")
+    if not event.from_user or not user.login:
+        msg_text = "❌ Ошибка авторизации. Нажми 'Войти'."
+        if isinstance(event, Message):
+            await event.answer(msg_text, reply_markup=get_login_kb())
+        else:
+            await event.message.answer(msg_text, reply_markup=get_login_kb())
         return
 
+    if isinstance(event, CallbackQuery) and event.data == "grades":
+        
+        # --- ПРОВЕРКА КУЛДАУНА (Только для принудительного обновления) ---
+        if user.grades_updated_at:
+            now = datetime.now(timezone.utc)
+            time_passed = now - user.grades_updated_at
+            
+            if time_passed < timedelta(minutes=15):
+                minutes_left = 15 - int(time_passed.total_seconds() / 60)
+                # Выкидываем красную плашку и ПРЕРЫВАЕМ функцию!
+                await event.answer(f"⏳ Слишком часто! Повтори попытку через {minutes_left} мин.", show_alert=True)
+                return
+            
+        force_update = True
+        await event.answer("🔄 Обновляю данные с сервера...") 
+        msg = await event.message.edit_text("⏳ Подключаюсь к Платонусу...")
+
+    elif isinstance(event, CallbackQuery) and event.data == "back_to_subjects":
+        await event.answer() # Убираем часики на кнопке
+        msg = await event.message.edit_text("⏳ Загружаю меню предметов...")   
+    # СЦЕНАРИЙ В: Пользователь нажал нижнюю кнопку меню
+    else:
+        msg = await event.answer("⏳ Загружаю меню предметов...")
+
+    # Берем время из базы данных (когда реально обновились оценки)
+    time_str = "неизвестно"
+    if user.grades_updated_at:
+        time_str = user.grades_updated_at.astimezone(ZoneInfo("Asia/Almaty")).strftime("%H:%M")
 
     try:
-        grades_text, is_cached = await get_platonus_grades(user)
-
+        grades_dict, is_cached = await get_platonus_grades(user, force_update=force_update)
+        
+        intro_text = "📊 <b>Ваши предметы:</b>\n<i>Выберите номер предмета внизу.</i>\n\n"
+        for index, subject_name in enumerate(grades_dict.keys(), start=1):
+            intro_text += f"<b>{index}.</b> {subject_name}\n"
+        
         if is_cached:
-            grades_text += "\n\n<i>(Взято из кэша. Оценки обновляются раз в час)</i>"
+            intro_text += f"\n<i>(Взято из кэша. Обновлено в {time_str})</i>"
+        else:
+            intro_text += "\n<i>(Данные свежие, только что спарсены с Платонуса)</i>"
+        
+        await msg.edit_text(intro_text, parse_mode="HTML", reply_markup=get_subjects_kb(grades_dict))
 
-        await loading_message.edit_text(grades_text, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Не смог спарсить оценки для {user_id}: {e}", exc_info=True)
         # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
         with contextlib.suppress(BaseException):
-            await loading_message.delete()
+            await msg.delete()
         await event.bot.send_message(chat_id=user_id, text="⚠️ Ошибка при получении оценок.", parse_mode="HTML")
+
+@router.callback_query(F.data.startswith("subj_"))
+async def show_subject_details(callback: CallbackQuery):
+    user = await User.get_or_none(telegram_id=callback.from_user.id)
+    if not user or not user.cached_grades:
+        await callback.answer("❌ Данные устарели. Нажмите 'Мои оценки' еще раз.", show_alert=True)
+        return
+
+    # Достаем хэш предмета из callback_data (например, отрезаем "subj_")
+    clicked_hash = callback.data.replace("subj_", "")
+    
+    # Так как мы сохранили кэш как JSON, достаем его
+    # (Если cached_grades это строка, сделай json.loads(user.cached_grades))
+    grades_dict = user.cached_grades 
+
+    # Ищем предмет, чей хэш совпадает с нажатым
+    target_subject = None
+    target_grades = None
+    for subj_name, grades_text in grades_dict.items():
+        if hashlib.md5(subj_name.encode()).hexdigest()[:10] == clicked_hash:
+            target_subject = subj_name
+            target_grades = grades_text
+            break
+
+    if target_subject:
+        # Формируем красивый текст для одного предмета
+        detail_text = f"📚 <b>{target_subject}</b>\n\n{target_grades}"
+        # Отправляем текст с кнопкой НАЗАД
+        await callback.message.edit_text(detail_text, parse_mode="HTML", reply_markup=get_back_to_subjects_kb())
+    else:
+        await callback.answer("❌ Предмет не найден.", show_alert=True)
+
+
+# --- НОВЫЙ ХЭНДЛЕР ДЛЯ КНОПКИ "НАЗАД" ---
+@router.callback_query(F.data == "back_to_subjects")
+async def go_back_to_menu(callback: CallbackQuery):
+    user = await User.get_or_none(telegram_id=callback.from_user.id)
+    
+    if not user or not user.cached_grades:
+        # Если кэша почему-то нет (например, стерли БД), просим нажать нижнюю кнопку
+        await callback.message.edit_text("❌ Данные устарели. Нажми '📊 Мои оценки' внизу экрана.")
+        return
+
+    # 4. ДОСТАЕМ ДАННЫЕ НАПРЯМУЮ ИЗ БД (Никакого парсера!)
+    # Если ты сохранял словарь через json.dumps, то теперь распаковываем его:
+    grades_dict = user.cached_grades
+
+    # 5. Формируем красивое время (как обычно)
+    time_str = "неизвестно"
+    if user.grades_updated_at:
+        almaty_tz = ZoneInfo("Asia/Almaty")
+        utc_time = user.grades_updated_at.replace(tzinfo=timezone.utc)
+        time_str = utc_time.astimezone(almaty_tz).strftime("%H:%M")
+        
+    text = f"📊 <b>Ваши предметы:</b>\n<i>Выберите номер предмета внизу.</i>\n\n"   
+    # Просто заново отрисовываем главное меню предметов из кэша
+    for index, subject_name in enumerate(grades_dict.keys(), start=1):
+        text += f"<b>{index}.</b> {subject_name}\n"
+        
+    text += f"\n<i>(Взято из кэша. Обновлено в {time_str})</i>"
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_subjects_kb(grades_dict))
+
+

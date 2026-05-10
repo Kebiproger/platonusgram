@@ -51,7 +51,7 @@ def get_stealth_headers() -> dict:
     }
 
 
-async def get_platonus_grades(user: User) -> tuple[str, bool]:
+async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[str, bool]:
     """
     Парсит оценки.
     Возвращает кортеж: (Текст_с_оценками, Актуальные_Cookies_словарем)
@@ -64,16 +64,14 @@ async def get_platonus_grades(user: User) -> tuple[str, bool]:
         cookies = None
     now = datetime.now(timezone.utc)
 
-    if user.grades_updated_at:
-        # Вычисляем разницу во времени
+    if user.grades_updated_at and user.cached_grades and not force_update:
         time_diff = now - user.grades_updated_at
-        
-        # Если прошло меньше 1 часа (timedelta(hours=1)) И оценки есть в базе
-        if time_diff < timedelta(hours=1) and user.cached_grades:
-            logger.info(f"Студент {user.login} получил оценки из кэша.")
-            # Возвращаем данные и флаг is_cached = True
-            return user.cached_grades, True 
-        
+        if not force_update:# Если прошло меньше 1 часа (timedelta(hours=1)) И оценки есть в базе
+            if time_diff < timedelta(hours=1) and user.cached_grades:
+                logger.info(f"Студент {user.login} получил оценки из кэша.")
+                # Возвращаем данные и флаг is_cached = True
+                return user.cached_grades, True 
+
     async with sem: # Входим в контекст семафора (гарантирует, что одновременно будет не больше 5 таких блоков)
         logger.info(f"Студент {user.login} встал в очередь на парсинг.")
         
@@ -171,60 +169,48 @@ async def get_platonus_grades(user: User) -> tuple[str, bool]:
 
                 data = response.json()
 
-                result_text = "📊 <b>Ваши текущие оценки:</b>\n\n"
+                grades_dict = {}
+                
                 for subject in data:
                     full_name = subject.get("subjectName", "Неизвестно")
+                    # Названия часто длинные, поэтому можно их сократить, 
+                    # чтобы они красиво смотрелись на кнопках (например, до 30 символов)
                     name = html.escape(full_name.split("(")[0].strip())
 
                     marks_list = []
-                    exams = subject.get("exams", [])
-                    for ex in exams:
+                    for ex in subject.get("exams", []):
                         ex_name = html.escape(ex.get("name", "Элемент"))
                         ex_mark = html.escape(str(ex.get("mark", "")))
                         if ex_mark and ex_mark != "-":
                             marks_list.append(f"  ▫️ <i>{ex_name}</i>: <b>{ex_mark}</b>")
 
-                    subject_text = f"📚 <b>{name}</b>\n"
-                    if marks_list:
-                        subject_text += "\n".join(marks_list)
-                    else:
-                        subject_text += "  ▫️ <i>Нет оценок</i>"
-                    subject_text += "\n\n"
-
-                    # Проверка на лимит сообщения (4096 символов)
-                    if len(result_text) + len(subject_text) > MAX_MESSAGE_LENGTH:
-                        result_text += "⚠️ <i>...и другие (слишком много оценок)</i>"
-                        break
-
-                    result_text += subject_text
-
+                    # Если оценок нет, тоже это фиксируем
+                    if not marks_list:
+                         marks_list.append("  ▫️ <i>Нет оценок</i>")
+                         
+                    # Сохраняем в словарь: Ключ - название предмета, Значение - текст с его оценками
+                    grades_dict[name] = "\n".join(marks_list)
                 # Возвращаем накопленный текст боту
-                current_cookies = dict(client.cookies)
-                user.cached_grades = result_text
+                current_cookies = {}
+                for cookie in client.cookies.jar:
+                    current_cookies[cookie.name] = cookie.value
+                user.cached_grades = grades_dict
                 user.grades_updated_at = now
                 if current_cookies:
                     user.session_cookie = json.dumps(current_cookies)
                 await user.save()
 
-                return result_text, False  # is_cached = False, т.к. мы только что получили свежие данные с сайта
+                return grades_dict, False  # is_cached = False, т.к. мы только что получили свежие данные с сайта
 
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in (429, 403):
+                if e.response.status_code in (401, 403):
                     logger.warning(f"🚨 WAF БЛОКИРОВКА! Код: {e.response.status_code}")
-                    # Здесь в будущем можно включать глобальный "Circuit Breaker"
-                return (
-                    f"❌ Сервер Platonus временно недоступен (Код: {e.response.status_code}). Попробуйте позже.",
-                    cookies,
-                )
+                return f"❌ Сервер Platonus временно недоступен (Код: {e.response.status_code}). Попробуйте позже.", False
+                
             except AttributeError as e:
-                return (
-                    f"❌ Ошибка парсинга HTML (возможно, сайт изменился):\nПодробности: {html.escape(str(e))}",
-                    cookies,
-                )
+                return f"❌ Ошибка парсинга HTML (возможно, сайт изменился):\nПодробности: {html.escape(str(e))}", False
+                
             except Exception as e:
                 error_trace = traceback.format_exc()
                 logger.error(f"ПОЛНАЯ ОШИБКА:\n{error_trace}", exc_info=True)
-                return (
-                    f"❌ Неизвестная ошибка: {type(e).__name__}\n{html.escape(str(e)) or 'Нет описания.'}",
-                    cookies,
-                )
+                return f"❌ Неизвестная ошибка: {type(e).__name__}\n{html.escape(str(e)) or 'Нет описания.'}", False
