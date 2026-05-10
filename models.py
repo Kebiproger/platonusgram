@@ -16,7 +16,7 @@ class User(Model):
 
     # Система кэширования
     cached_grades = fields.TextField(null=True)
-    grades_updated_at = fields.FloatField(null=True) # Unix time
+    grades_updated_at = fields.DatetimeField(null=True) 
 
     # Защита от банов
     error_count = fields.IntField(default=0)

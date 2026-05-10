@@ -6,7 +6,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from crypto import fernet_decrypt_password, fernet_encrypt_password, js_decrypt_password
+from crypto import  fernet_encrypt_password, js_decrypt_password
 from keyboards import get_login_kb, get_main_kb
 from models import User
 from parser import get_platonus_grades
@@ -130,24 +130,16 @@ async def cmd_grades(event: CallbackQuery | Message):
     # чтобы она "закрепилась" у пользователя
 
     user = await User.get_or_none(telegram_id=user_id)
-    if not user:
+    if not user or not user.login or not user.password_enc:
         await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_login_kb())
         return
 
-    # Твоя логика получения оценок...
-    login, password_enc = user.login, user.password_enc
-    password = fernet_decrypt_password(password_enc)
-
-    
-
-    old_cookies = json.loads(user.session_cookie) if user.session_cookie else None
 
     try:
-        grades_text, new_cookies = await get_platonus_grades(login, password, old_cookies)
+        grades_text, is_cached = await get_platonus_grades(user)
 
-        if new_cookies:
-            user.session_cookie = json.dumps(new_cookies)
-            await user.save()
+        if is_cached:
+            grades_text += "\n\n<i>(Взято из кэша. Оценки обновляются раз в час)</i>"
 
         await loading_message.edit_text(grades_text, parse_mode="HTML")
     except Exception as e:
