@@ -12,3 +12,4 @@ unit-test.py
 private.pem
 bot_logs.log
 database.db*
+push.sh

@@ -8,11 +8,11 @@ from bot_handler import router
 from commands import set_bot_commands
 from config import TELEGRAM_TOKEN, setup_logging,init_db
 
-logger = logging.getLogger(__name__)
 
 
 async def main():
     setup_logging()
+    logger = logging.getLogger(__name__)
     await init_db()  # Инициализируем базу данных при старте бота
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()

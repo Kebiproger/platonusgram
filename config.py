@@ -9,8 +9,6 @@ TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 URL=os.getenv("SERVER_URL")
 FERNET_KEY=os.getenv("FERNET_KEY").encode()
 
-logger = logging.getLogger(__name__)
-
 class NoSleepFilter(logging.Filter):
     def filter(self, record):
         # Превращаем сообщение в нижний регистр и ищем слово "sleep"
@@ -42,7 +40,7 @@ def setup_logging():
     )
     logging.getLogger("aiogram").addFilter(NoSleepFilter())
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
+logger = logging.getLogger(__name__)
 async def init_db():
     await Tortoise.init(
         db_url='sqlite://database.db?wal=true',

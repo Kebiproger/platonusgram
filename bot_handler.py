@@ -131,7 +131,7 @@ async def cmd_grades(event: CallbackQuery | Message):
 
     user = await User.get_or_none(telegram_id=user_id)
     if not user or not user.login or not user.password_enc:
-        await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.", reply_markup=get_login_kb())
+        await loading_message.edit_text("❌ Ошибка авторизации. Нажми 'Войти'.")
         return
 
 
