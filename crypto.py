@@ -30,15 +30,13 @@ with open("private.pem", "rb") as key_file:
 
 # Функция для расшифровки
 def js_decrypt_password(encrypted_base64_string: str) -> str:
-    try:
-        # Библиотека JSEncrypt присылает данные в формате Base64, декодируем их
-        encrypted_bytes = base64.b64decode(encrypted_base64_string)
+    # Мы НЕ ловим ошибку здесь, чтобы она "всплыла" в хэндлере 
+    # и мы не сохранили текст ошибки вместо пароля в базу данных.
+    encrypted_bytes = base64.b64decode(encrypted_base64_string)
 
-        # Расшифровываем приватным ключом
-        decrypted_bytes = private_key.decrypt(
-            encrypted_bytes,
-            padding.PKCS1v15() # Стандарт отступов, который использует JSEncrypt
-        )
-        return decrypted_bytes.decode('utf-8')
-    except Exception as e:
-        return f"Ошибка расшифровки! Хакер подменил данные: {e}"
+    # Расшифровываем приватным ключом
+    decrypted_bytes = private_key.decrypt(
+        encrypted_bytes,
+        padding.PKCS1v15() # Стандарт отступов, который использует JSEncrypt
+    )
+    return decrypted_bytes.decode('utf-8')

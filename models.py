@@ -21,5 +21,8 @@ class User(Model):
     # Защита от банов
     error_count = fields.IntField(default=0)
 
+    is_active = fields.BooleanField(default=True)
+    get_grades_updates= fields.BooleanField(default=True)
+
     class Meta:
         table = "users" # Как таблица будет называться внутри файла database.db

@@ -6,7 +6,6 @@ from tortoise import Tortoise
 # Подгружаем данные из .env
 load_dotenv()
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
-URL=os.getenv("SERVER_URL")
 FERNET_KEY=os.getenv("FERNET_KEY").encode()
 
 class NoSleepFilter(logging.Filter):
@@ -41,12 +40,14 @@ def setup_logging():
     logging.getLogger("aiogram").addFilter(NoSleepFilter())
     logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-async def init_db():
+async def init_db(generate_schemas: bool = False):
     await Tortoise.init(
         db_url='sqlite://database.db?wal=true',
         modules={'models' : ["models"]}
     )
-    await Tortoise.generate_schemas()
+    if generate_schemas:
+        await Tortoise.generate_schemas()
+    
     conn = Tortoise.get_connection("default")
     
     # Отправляем "сырые" команды SQLite для настройки

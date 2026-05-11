@@ -3,6 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Aiogram](https://img.shields.io/badge/Aiogram-3.x-orange?logo=telegram&logoColor=white)](https://docs.aiogram.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 > **Высокопроизводительный асинхронный Telegram-бот**, предоставляющий современный, быстрый и безопасный мобильный интерфейс для университетской системы **Platonus**. 
 
@@ -39,7 +40,7 @@
   - Динамическая подмена `User-Agent` и заголовков.
   - Имитация поведения человека (алгоритм Jitter — случайные задержки).
   - Поддержка **HTTP/2** для ускорения запросов и обхода WAF.
-- **🚥 Ограничение нагрузки (Rate Limiting):**
+- **🚥 Ограничение aiolimiter` и `нагрузки (Rate Limiting):**
   - Использование `asyncio.Semaphore` для контроля конкурентных запросов к серверу Platonus.
   - Двухуровневый Anti-Spam (UI + бизнес-логика).
 - **🗄 Оптимизация БД:**
@@ -106,4 +107,10 @@
 
 ## 🤝 Контрибьютинг
 
+
+---
+
+## 📄 Лицензия
+
+Проект является полностью **Open-Source** и распространяется на условиях лицензии [MIT](LICENSE).
 Pull requests приветствуются! Если вы нашли баг или хотите предложить фичу, создайте Issue.

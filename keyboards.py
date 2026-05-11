@@ -16,26 +16,13 @@ def get_main_kb() -> ReplyKeyboardMarkup:
     # Добавляем кнопки по одной
     builder.button(text="📊 Мои оценки")
     builder.button(text="📅 Расписание")
-    # builder.button(text="⚙️ Настройки", callback_data="settings")
+    builder.button(text="🔑 Аутентификация", web_app=WebAppInfo(url="https://kebiproger.github.io/platonus.iitu.edu.kz/?v=2"))
+    builder.button(text="⚙️ Настройки")
 
-    # Метод adjust() автоматически выстраивает кнопки по рядам!
-    # (2, 1) означает: 2 кнопки в первом ряду, 1 во втором.
-    builder.adjust(2, 1)
+    builder.adjust(2)
     
     # resize_keyboard=True делает кнопки аккуратными (не на пол-экрана)
     return builder.as_markup(resize_keyboard=True, input_field_placeholder="Выбери действие...")
-
-
-def get_grades_inline_kb() -> InlineKeyboardMarkup:
-    """
-    Создает инлайн-кнопку "Обновить" под сообщением с оценками.
-    """
-    builder = InlineKeyboardBuilder()
-    
-    # callback_data - это то, что перехватит твой @router.callback_query()
-    builder.button(text="🔄 Обновить оценки", callback_data="grades")
-    
-    return builder.as_markup()
 
 def get_subjects_kb(grades_dict: dict) -> InlineKeyboardMarkup:
     """Генерирует кнопки с названиями предметов"""
@@ -66,3 +53,12 @@ def get_login_kb():
         web_app=WebAppInfo(url="https://kebiproger.github.io/platonus.iitu.edu.kz/?v=2")
     )
     return ReplyKeyboardMarkup(keyboard=[[web_app_btn]], resize_keyboard=True)
+
+def get_settings_kb():
+    builder = InlineKeyboardBuilder()
+
+    builder.button(text="🔔 Получать обновлении оценок", callback_data="enable_grades_updates")
+    builder.button(text="🔕 НЕ ПОЛУЧАТЬ обновлении оценок", callback_data="disable_grades_updates")
+    builder.button(text="◀️ Назад в меню", callback_data="back_to_main_menu")
+    builder.adjust(2)
+    return builder.as_markup()

@@ -8,6 +8,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="start", description="Перезапустить бота"),
         BotCommand(command="login", description="🔑 Войти в Платонус"),
         BotCommand(command="grades", description="📊 Мои оценки"),
+        BotCommand(command="settings", description="⚙️ Настройки"),
         BotCommand(command="help", description="❓ Как пользоваться ботом")
     ]
 

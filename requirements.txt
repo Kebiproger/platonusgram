@@ -7,7 +7,6 @@ anyio
 asyncio
 attrs
 beautifulsoup4
-bs4
 certifi
 cffi
 cryptography
@@ -31,3 +30,6 @@ tortoise-orm
 lxml
 httpx
 httpx[http2]
+apscheduler
+aerich
+aiolimiter
