@@ -60,5 +60,5 @@ def get_settings_kb():
     builder.button(text="🔔 Получать обновлении оценок", callback_data="enable_grades_updates")
     builder.button(text="🔕 НЕ ПОЛУЧАТЬ обновлении оценок", callback_data="disable_grades_updates")
     builder.button(text="◀️ Назад в меню", callback_data="back_to_main_menu")
-    builder.adjust(2)
+    builder.adjust(1)
     return builder.as_markup()

@@ -7,14 +7,14 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from aiogram.exceptions import TelegramBadRequest
 
-from crypto import  fernet_encrypt_password, js_decrypt_password
-from keyboards import get_login_kb, get_main_kb, get_subjects_kb, get_back_to_subjects_kb, get_settings_kb
-from models import User
-from parser import get_platonus_grades
+from backend.crypto import  fernet_encrypt_password, js_decrypt_password
+from bot.keyboards import get_login_kb, get_main_kb, get_subjects_kb, get_back_to_subjects_kb, get_settings_kb
+from backend.db.models import User
+from backend.parser import get_platonus_grades
 from datetime import timezone, timedelta, datetime
 from zoneinfo import ZoneInfo
 import hashlib
-from middlewares import UserCheckMiddleware
+from bot.middlewares import UserCheckMiddleware
 
 
 public_router = Router()
@@ -24,6 +24,7 @@ private_router.message.middleware(UserCheckMiddleware())
 private_router.callback_query.middleware(UserCheckMiddleware())
 
 logger = logging.getLogger(__name__)
+
 
 
 @public_router.message(Command("help"))
@@ -168,17 +169,37 @@ async def disable_updates(callback: CallbackQuery, user : User):
             # Если ошибка другая (например, сообщение удалено) — пробрасываем выше
             raise e
     
-
-
+# @private_router.message(F.text == "📅 Расписание")
+# async def schedule(message: Message, user: User):
+#     schedule_dict, is_cached = await get_platonus_schedule(user, force_update=False)
+#     if isinstance(schedule_dict, str):  # Если вернулась строка — это сообщение об ошибке
+#         await message.answer(f"❌ <b>Ошибка:</b>\n{schedule_dict}", parse_mode="HTML", reply_markup=get_login_kb())
+#         return
+#     text = "📅 <b>Ваше расписание:</b>\n\n"
+#     for day, events in schedule_dict.items():
+#         text += f"<b>{day}:</b>\n"
+#         for event in events:
+#             text += f" - {event}\n"
+#         text += "\n"
+#     if is_cached:
+#         time_str = "неизвестно"
+#         if user.schedule_updated_at:
+#             db_time = user.schedule_updated_at
+#             utc_time = db_time.astimezone(timezone.utc)
+#             kz_time = utc_time + timedelta(hours=5)
+#             time_str = kz_time.strftime("%H:%M")
+#         text += f"\n<i>(Взято из кэша. Обновлено в {time_str})</i>"
+#     else:
+#         text += "\n<i>(Данные свежие, только что спарсены с Платонуса)</i>"
+#     await message.answer(text, parse_mode="HTML")
 
 @private_router.message(F.text == "📊 Мои оценки")
 @private_router.message(Command("grades"))
 @private_router.callback_query(F.data == "grades")
-async def cmd_grades(event: CallbackQuery | Message):
+async def cmd_grades(event: CallbackQuery | Message, user: User):
     user_id = event.from_user.id
     logger.info(f"Юзер {user_id} запросил оценки.")
     force_update = False
-    user = await User.get_or_none(telegram_id=user_id)
 
     # not event.from_user если сообщение пришло от канала или группы, а не от юзера. И если нет логина в БД — значит, пользователь не авторизовался.
     if not event.from_user or not user.login:

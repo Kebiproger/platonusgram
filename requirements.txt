@@ -33,3 +33,4 @@ httpx[http2]
 apscheduler
 aerich
 aiolimiter
+asyncpg

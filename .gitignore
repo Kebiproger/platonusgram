@@ -13,3 +13,4 @@ private.pem
 bot_logs.log
 database.db*
 push.sh
+pg_data

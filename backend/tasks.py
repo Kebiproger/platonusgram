@@ -1,10 +1,10 @@
 from aiogram import Bot
 import logging
 from aiogram.exceptions import TelegramForbiddenError
-from models import User
+from backend.db.models import User
 import random
 import asyncio
-from parser import get_platonus_grades
+from backend.parser import get_platonus_grades
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ async def update_single_user_grades(bot: Bot, user: User):
         new_grades, is_cached = await get_platonus_grades(user, force_update=True)
 
         if isinstance(new_grades, str):
-            logger.warning(f"Ошибка обновления для {user.telegram_id}: {new_grades}")
+            logger.warning(f"Ошибка обновления для: {new_grades}")
             return
 
         old_grades = user.cached_grades
@@ -48,9 +48,9 @@ async def update_single_user_grades(bot: Bot, user: User):
     except TelegramForbiddenError:
         user.is_active = False
         await user.save(update_fields=["is_active"])
-        logger.info(f"Юзер {user.telegram_id} заблокировал бота.")
+        logger.info(f"Юзер заблокировал бота.")
     except Exception as e:
-        logger.error(f"Ошибка фоновой проверки {user.telegram_id}: {e}")
+        logger.error(f"Ошибка фоновой проверки : {e}")
 
 async def auto_update_grades_task(bot: Bot):
     """Главная задача планировщика: запускает проверку всех активных юзеров."""

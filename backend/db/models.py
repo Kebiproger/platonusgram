@@ -9,6 +9,7 @@ class User(Model):
     # Главный идентификатор
     telegram_id = fields.BigIntField(unique=True, index=True)
     login = fields.CharField(max_length=100, null=True)
+    platonus_sid = fields.IntField (null=True)
 
     # Данные для Платонуса
     password_enc = fields.TextField(null=True) # Для зашифрованного пароля
@@ -16,7 +17,9 @@ class User(Model):
 
     # Система кэширования
     cached_grades = fields.JSONField(null=True)
-    grades_updated_at = fields.DatetimeField(null=True) 
+    cached_schedule = fields.JSONField(null=True)
+    grades_updated_at = fields.DatetimeField(null=True)
+    schedule_updated_at = fields.DatetimeField(null=True) 
 
     # Защита от банов
     error_count = fields.IntField(default=0)

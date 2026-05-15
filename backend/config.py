@@ -7,6 +7,11 @@ from tortoise import Tortoise
 load_dotenv()
 TELEGRAM_TOKEN=os.getenv("TELEGRAM_TOKEN")
 FERNET_KEY=os.getenv("FERNET_KEY").encode()
+DB_USER=os.getenv("DB_USER")
+DB_PASSWORD=os.getenv("DB_PASSWORD")
+DB_NAME=os.getenv("DB_NAME")
+DB_HOST=os.getenv("DB_HOST")
+DB_URL=f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}'
 
 class NoSleepFilter(logging.Filter):
     def filter(self, record):
@@ -42,7 +47,7 @@ def setup_logging():
 logger = logging.getLogger(__name__)
 async def init_db(generate_schemas: bool = False):
     await Tortoise.init(
-        db_url='sqlite://database.db?wal=true',
+        db_url=DB_URL,
         modules={'models' : ["models"]}
     )
     if generate_schemas:
@@ -50,8 +55,4 @@ async def init_db(generate_schemas: bool = False):
     
     conn = Tortoise.get_connection("default")
     
-    # Отправляем "сырые" команды SQLite для настройки
-    await conn.execute_query("PRAGMA journal_mode=WAL;")
-    await conn.execute_query("PRAGMA synchronous=NORMAL;") # <- Секретный буст скорости
-    
-    logger.info("База данных Tortoise инициализирована. Режим WAL включен!")
+    logger.info("База данных Tortoise инициализирована!")

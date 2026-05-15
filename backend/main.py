@@ -4,11 +4,11 @@ import logging
 from aiogram import Bot, Dispatcher
 from tortoise import Tortoise
 
-from bot_handler import public_router, private_router
-from commands import set_bot_commands
-from config import TELEGRAM_TOKEN, setup_logging,init_db
+from bot.bot_handler import public_router, private_router
+from bot.commands import set_bot_commands
+from backend.config import TELEGRAM_TOKEN, setup_logging,init_db
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from tasks import auto_update_grades_task
+from backend.tasks import auto_update_grades_task
 from datetime import timezone, timedelta
 
 import os
@@ -42,10 +42,13 @@ async def main():
     scheduler.add_job(
         auto_update_grades_task, 
         trigger='cron',
-        hour="8-20/3", # 8:00-20:00 every 3 hours 
+        hour="10-22/3", # 8:00-20:00 every 3 hours 
         minute="0",
-        kwargs={'bot': bot}
+        kwargs={'bot': bot},
+        jitter=600
     )
+
+    
     
     # Запускаем планировщик
     scheduler.start()

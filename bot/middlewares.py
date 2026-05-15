@@ -1,7 +1,7 @@
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 from typing import Callable, Dict, Any, Awaitable
-from models import User # Твоя БД
+from backend.db.models import User # Твоя БД
 
 class UserCheckMiddleware(BaseMiddleware):
     async def __call__(

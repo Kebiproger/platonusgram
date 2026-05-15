@@ -1,9 +1,10 @@
 # Файл: db_config.py
+from backend.config import DB_URL
 
 TORTOISE_ORM = {
     "connections": {
         # ВАЖНО: Указал твою базу database.db, а не db.sqlite3!
-        "default": "sqlite://database.db" 
+        "default": DB_URL
     }, 
     "apps": {
         "models": {

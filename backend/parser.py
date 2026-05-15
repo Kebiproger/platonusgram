@@ -7,8 +7,8 @@ import traceback
 from datetime import datetime, timedelta, timezone
 import httpx
 from bs4 import BeautifulSoup
-from crypto import fernet_decrypt_password
-from models import User
+from backend.crypto import fernet_decrypt_password
+from backend.db.models import User
 from aiolimiter import AsyncLimiter
 
 platonus_limiter = AsyncLimiter(max_rate=3, time_period=1)
@@ -18,16 +18,39 @@ logger = logging.getLogger(__name__)
 
 platonus_semaphore = None # Глобальный семафор для ограничения одновременных запросов к Платонусу
 
-MAX_MESSAGE_LENGTH = 4000
-HTTP_OK = 200
-
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
 ]
+
+async def get_person_id(client: httpx.AsyncClient) -> int:
+    
+    # Делаем GET-запрос. Заголовки и куки клиент подставит автоматически, 
+    # так как мы настроили их при его создании в get_authenticated_client.
+    resp = await client.get("https://platonus.iitu.edu.kz/rest/api/person/personID")
+    
+    # Метод raise_for_status() проверяет HTTP-код ответа.
+    # Если код >= 400 (например, 401 Unauthorized или 500 Server Error), 
+    # он выбросит исключение httpx.HTTPStatusError. 
+    # Зачем: это защищает нас от попытки скормить парсеру JSON страницу с ошибкой Nginx.
+    resp.raise_for_status()
+    
+    print(f"DEBUG: Status Code = {resp.status_code}")
+
+# 2. Проверяем заголовки ответа. 
+# Нам важно поле 'Content-Type'. Если там 'text/html', значит API выплюнул нас на страницу входа.
+    print(f"DEBUG: Response Headers = {resp.headers}")
+
+    # 3. Смотрим сырое содержимое. 
+    # Если здесь пусто (b''), значит сервер действительно вернул 0 байт.
+    print(f"DEBUG: Raw Content = {resp.content}")
+    # Метод .json() читает поток байтов из ОЗУ, декодирует UTF-8 и превращает в Python dict.
+    data = resp.json()
+    print(f"DEBUG: Полученный personID через API: {data}")
+    # Ожидаем твою структуру JSON здесь...
+    return data["personID"]
 
 def get_semaphore():
     global platonus_semaphore
@@ -42,7 +65,7 @@ def get_stealth_headers() -> dict:
     """Генерирует заголовки, чтобы выглядеть как настоящий браузер из СНГ."""
     return {
         "User-Agent": random.choice(USER_AGENTS),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept": "application/json,text/plain, text/html, application/xhtml+xml, application/xml;q=0.9, image/avif, image/webp, */*;q=0.8",
         "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
@@ -52,6 +75,87 @@ def get_stealth_headers() -> dict:
         "Sec-Fetch-Site": "same-origin",
         "Sec-Fetch-User": "?1",
     }
+
+# Beta function, don't pay attention !
+async def platonus_login(user: User, link: str) -> httpx.Client:
+    cookies = json.loads(user.session_cookie) if user.session_cookie else None
+
+    async with httpx.AsyncClient(cookies=cookies, headers=get_stealth_headers(), timeout=15.0, follow_redirects=True) as client:
+        response = await client.get(link)
+
+        if "AccessDenied" in str(response.url):
+            logger.info("🔑 Сессия устарела или отсутствует. Имитируем ввод логина...")
+            login_payload = {
+                "login": user.login, 
+                "password": fernet_decrypt_password(user.password_enc)
+            }
+            
+            await asyncio.sleep(random.uniform(2.0, 4.5)) # Ждем 2-4 секунды, имитируя действия человека
+            logger.info("🔑 Авторизация...")
+            login_resp = await client.post("https://platonus.iitu.edu.kz/rest/api/login", json=login_payload)
+            login_resp.raise_for_status() 
+            if login_resp.status_code != 200:
+                logger.warning(f"🚨 Ошибка авторизации Код: {login_resp.status_code}")
+                return None
+            
+            logger.info("✅ Успешный вход! Сохраняем новые куки.")
+            
+            current_cookies = {}
+            for cookie in client.cookies.jar:
+                current_cookies[cookie.name] = cookie.value
+            return current_cookies
+        
+        logger.info("🚀 Сессия (Cookies) жива! Логин не потребовался. Экономим время.")
+        return cookies                                                       
+
+# Beta function, don't pay attention !
+def _parse_schedule_html(html_content: str) -> dict:
+    """
+    Безопасно парсит HTML страницу расписания Платонуса.
+    Возвращает словарь, где ключи - дни недели, значения - списки пар.
+    """
+    # Используем lxml для скорости, но можно и встроенный html.parser
+    soup = BeautifulSoup(html_content, 'lxml')
+    
+    schedule_data = {}
+    
+    # 1. Ищем все карточки, так как каждый день обернут в <div class="card">
+    day_cards = soup.find_all('div', class_='card')
+    
+    for card in day_cards:
+        # 2. Ищем название дня (Понедельник, Вторник и т.д.)
+        title_tag = card.find('h5', class_='card-title')
+        if not title_tag:
+            continue # Если нет заголовка, пропускаем этот блок
+            
+        day_name = title_tag.text.strip()
+        schedule_data[day_name] = []
+        
+        # 3. Ищем все строки таблицы расписания для этого дня
+        rows = card.find_all('tr')
+        
+        for row in rows:
+            cols = row.find_all('td')
+            
+            # Защита: колонок должно быть ровно две (Время и Предмет)
+            if len(cols) == 2:
+                time_str = cols[0].text.strip()
+                
+                # В Платонусе данные лежат внутри <div>, который внутри <app-schedule-...>
+                lesson_div = cols[1].find('div')
+                
+                if lesson_div:
+                    # Извлекаем текст и чистим его от лишних пробелов и переносов строк
+                    lesson_text = lesson_div.text.strip()
+                    
+                    # Если текст не пустой (т.е. пара есть)
+                    if lesson_text:
+                        schedule_data[day_name].append({
+                            "time": time_str,
+                            "lesson": lesson_text
+                        })
+
+    return schedule_data
 
 
 async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[str, bool]:
@@ -71,7 +175,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
         time_diff = now - user.grades_updated_at
         if not force_update:# Если прошло меньше 1 часа (timedelta(hours=1)) И оценки есть в базе
             if time_diff < timedelta(hours=1) and user.cached_grades:
-                logger.info(f"Студент {user.login} получил оценки из кэша.")
+                logger.info(f"Студент получил оценки из кэша.")
                 # Возвращаем данные и флаг is_cached = True
                 return user.cached_grades, True 
 
@@ -79,7 +183,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
         
         async with platonus_limiter:
         
-            logger.info(f"Студент {user.login} встал в очередь на парсинг.")
+            logger.info(f"Студент встал в очередь на парсинг.")
             
             async with httpx.AsyncClient(
                 cookies=cookies,
@@ -89,6 +193,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                 http2=True,
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             ) as client:
+                
                 try:
                     logger.info("📡 Проверяем актуальность сессии (Cookies)...")
                     resp = await client.get("https://platonus.iitu.edu.kz/student_register")
@@ -112,16 +217,16 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                         login_resp = await client.post(
                             login_url, json={"login": user.login, "password": fernet_decrypt_password(user.password_enc)}
                         )
-
+                        login_resp.raise_for_status() # beta usage - не обращай внимания на эту строку, она просто выбросит исключение, если код ответа будет 4xx или 5xx. Это защитит нас от попытки парсить страницу с ошибкой вместо JSON с personID.
                         if login_resp.status_code != 200:
                             # ❌ ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)
                             user.error_count += 1 # Увеличиваем счетчик
-                            logger.warning(f"🚨 Ошибка авторизации для {user.login}. Попытка {user.error_count}/5.")
+                            logger.warning(f"🚨 Ошибка авторизации. Попытка {user.error_count}/5.")
                             await user.save(update_fields=["error_count"]) # Предовтрящает IncompleteInstanceError
                             
                             # Если ошибок стало 5 (или больше)
                             if user.error_count >= 5:
-                                logger.warning(f"🚨 Юзер {user.telegram_id} отправлен в КАРАНТИН (5 ошибок).")
+                                logger.warning(f"🚨 Юзер отправлен в КАРАНТИН (5 ошибок).")
                                 # Тут можно удалить старый зашифрованный пароль, чтобы точно больше не пытаться им зайти
                                 user.password_enc = None 
                                 await user.save(update_fields=["password_enc"])
@@ -133,16 +238,24 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                         # ✅ УСПЕШНЫЙ ВХОД
                         logger.info("✅ Успешный вход! Сохраняем новые куки.")
                         
+                        current_cookies = {}
+                        for cookie in client.cookies.jar:
+                            current_cookies[cookie.name] = cookie.value
+                        if current_cookies:
+                            user.session_cookie = json.dumps(current_cookies)
+                        await user.save(update_fields=["session_cookie"])
+                        
                         # ОБЯЗАТЕЛЬНО ОБНУЛЯЕМ СЧЕТЧИК, если вход успешен!
                         if user.error_count > 0:
                             user.error_count = 0
-                            await user.save()
+                            await user.save(update_fields=["error_count"])
 
                         # Имитация паузы после логина (пока грузится дашборд)
                         await asyncio.sleep(random.uniform(1.0, 2.0))
 
                         # Запрашиваем страницу еще раз, уже с новыми куками
                         resp = await client.get("https://platonus.iitu.edu.kz/student_register")
+                        client.headers.update({"Referer": "https://platonus.iitu.edu.kz/student_register"})
                     else:
                         logger.info(
                             "🚀 Сессия (Cookies) жива! Логин не потребовался. Экономим время."
@@ -153,25 +266,34 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
 
                     if not student_id_input:
                         logger.info(f"DEBUG: Part of HTML: {resp.text[:500]}")
+                        user.is_active = False
+                        await user.save(update_fields=["is_active"])
                         return (
-                            "❌ Ошибка авторизации: неверный логин/пароль или сессия не сохранилась.",
-                            cookies,
+                            "❌ Не удалось спарсить оценки, походу у вас стоит анкетирование.После единождого успешного парсинга вам дальше не понадобится проходить анкетирование)", False
                         )
-
+                    else:
+                        user.is_active = True
+                        await user.save(update_fields=["is_active"])
                     sid = student_id_input.get("value")
+                    user.platonus_sid = sid
+                    await user.save(update_fields=["platonus_sid"])
 
+                    if not sid:
+                        logger.warning("🚨 Не удалось получить personID через API. Возможно, проблема с сессией.")
+                        return "❌ Не удалось спарсить оценки, походу у вас стоит анкетирование.После единождого успешного парсинга вам дальше не понадобится проходить анкетирование)", False
+                    
                     year_select = soup.find("select", {"id": "year"})
                     term_select = soup.find("select", {"name": "term"})
 
                     if not year_select or not term_select:
-                        return "❌ Не удалось найти селекторы года или семестра.", cookies
+                        return "❌ Не удалось найти селекторы года или семестра.", False
 
                     # Ищем выбранные опции внутри найденных селекторов
                     year_option = year_select.find("option", selected=True)
                     term_option = term_select.find("option", selected=True)
 
                     if not year_option or not term_option:
-                        return "❌ Не удалось определить текущий год или семестр.", cookies
+                        return "❌ Не удалось определить текущий год или семестр.", False
 
                     # Безопасно достаем value
                     year = year_option.get("value")
@@ -188,7 +310,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                     await asyncio.sleep(random.uniform(0.5, 1.2))
 
                     logger.info(f"📡 Получение оценок ({year}, семестр {term})...")
-                    grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{sid}"
+                    grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{str(sid)}"
                     response = await client.get(grades_api_url)
                     response.raise_for_status()
 
@@ -216,14 +338,9 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                         # Сохраняем в словарь: Ключ - название предмета, Значение - текст с его оценками
                         grades_dict[name] = "\n".join(marks_list)
                     # Возвращаем накопленный текст боту
-                    current_cookies = {}
-                    for cookie in client.cookies.jar:
-                        current_cookies[cookie.name] = cookie.value
                     user.cached_grades = grades_dict
                     user.grades_updated_at = now
-                    if current_cookies:
-                        user.session_cookie = json.dumps(current_cookies)
-                    await user.save()
+                    await user.save(update_fields=["cached_grades", "grades_updated_at", "platonus_sid"])
 
                     return grades_dict, False  # is_cached = False, т.к. мы только что получили свежие данные с сайта
 
