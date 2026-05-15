@@ -9,7 +9,7 @@ TORTOISE_ORM = {
     "apps": {
         "models": {
             # Указываем твой файл models.py и служебный файл aerich
-            "models": ["models", "aerich.models"], 
+            "models": ["backend.db.models", "aerich.models"], 
             "default_connection": "default",
         },
     },

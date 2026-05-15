@@ -1,6 +1,8 @@
 services:
   platonus_bot:
-    build: backend
+    build: .
+    depends_on:
+      - db-service 
     container_name: platonus_bot
     # Бот будет автоматически перезапускаться при сбоях или рестарте сервера
     restart: unless-stopped
