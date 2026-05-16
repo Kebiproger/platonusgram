@@ -91,7 +91,6 @@
 
 ```text
 ├── backend/            # Серверная часть и бизнес-логика
-│   ├── main.py         # Точка входа
 │   ├── parser.py       # Движок парсинга Platonus
 │   ├── tasks.py        # Фоновые задачи (APScheduler)
 │   ├── crypto.py       # Шифрование (AES & RSA)
@@ -104,10 +103,10 @@
 │   ├── commands.py     # Команды бота
 │   ├── keyboards.py    # Клавиатуры
 │   └── middlewares.py  # Промежуточные слои (Throttle и др.)
+├── main.py         # Точка входа```
 ├── migrations/         # Миграции базы данных (Aerich)
 ├── docker-compose.yml  # Оркестрация контейнеров
 └── .env.example        # Шаблон переменных окружения
-```
 
 ---
 

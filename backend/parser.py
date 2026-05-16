@@ -11,7 +11,7 @@ from backend.crypto import fernet_decrypt_password
 from backend.db.models import User
 from aiolimiter import AsyncLimiter
 
-platonus_limiter = AsyncLimiter(max_rate=3, time_period=1)
+platonus_limiter = AsyncLimiter(max_rate=2, time_period=1)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,38 +25,11 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
 ]
 
-async def get_person_id(client: httpx.AsyncClient) -> int:
-    
-    # Делаем GET-запрос. Заголовки и куки клиент подставит автоматически, 
-    # так как мы настроили их при его создании в get_authenticated_client.
-    resp = await client.get("https://platonus.iitu.edu.kz/rest/api/person/personID")
-    
-    # Метод raise_for_status() проверяет HTTP-код ответа.
-    # Если код >= 400 (например, 401 Unauthorized или 500 Server Error), 
-    # он выбросит исключение httpx.HTTPStatusError. 
-    # Зачем: это защищает нас от попытки скормить парсеру JSON страницу с ошибкой Nginx.
-    resp.raise_for_status()
-    
-    print(f"DEBUG: Status Code = {resp.status_code}")
-
-# 2. Проверяем заголовки ответа. 
-# Нам важно поле 'Content-Type'. Если там 'text/html', значит API выплюнул нас на страницу входа.
-    print(f"DEBUG: Response Headers = {resp.headers}")
-
-    # 3. Смотрим сырое содержимое. 
-    # Если здесь пусто (b''), значит сервер действительно вернул 0 байт.
-    print(f"DEBUG: Raw Content = {resp.content}")
-    # Метод .json() читает поток байтов из ОЗУ, декодирует UTF-8 и превращает в Python dict.
-    data = resp.json()
-    print(f"DEBUG: Полученный personID через API: {data}")
-    # Ожидаем твою структуру JSON здесь...
-    return data["personID"]
-
 def get_semaphore():
     global platonus_semaphore
     # Если семафора еще нет, создаем его (это произойдет только 1 раз!)
     if platonus_semaphore is None:
-        platonus_semaphore = asyncio.Semaphore(10)
+        platonus_semaphore = asyncio.Semaphore(20)
         logger.info("Семафор для Платонуса успешно инициализирован!")
     
     return platonus_semaphore
@@ -78,9 +51,10 @@ def get_stealth_headers() -> dict:
 
 # Beta function, don't pay attention !
 async def platonus_login(user: User, link: str) -> httpx.Client:
+    
     cookies = json.loads(user.session_cookie) if user.session_cookie else None
 
-    async with httpx.AsyncClient(cookies=cookies, headers=get_stealth_headers(), timeout=15.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(cookies=cookies, headers=get_stealth_headers(), timeout=20.0, follow_redirects=True) as client:
         response = await client.get(link)
 
         if "AccessDenied" in str(response.url):
@@ -218,7 +192,8 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                             login_url, json={"login": user.login, "password": fernet_decrypt_password(user.password_enc)}
                         )
                         login_resp.raise_for_status() # beta usage - не обращай внимания на эту строку, она просто выбросит исключение, если код ответа будет 4xx или 5xx. Это защитит нас от попытки парсить страницу с ошибкой вместо JSON с personID.
-                        if login_resp.status_code != 200:
+                        
+                        if  "AccessDenied" in str(login_resp.url):
                             # ❌ ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)
                             user.error_count += 1 # Увеличиваем счетчик
                             logger.warning(f"🚨 Ошибка авторизации. Попытка {user.error_count}/5.")
@@ -255,7 +230,6 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
 
                         # Запрашиваем страницу еще раз, уже с новыми куками
                         resp = await client.get("https://platonus.iitu.edu.kz/student_register")
-                        client.headers.update({"Referer": "https://platonus.iitu.edu.kz/student_register"})
                     else:
                         logger.info(
                             "🚀 Сессия (Cookies) жива! Логин не потребовался. Экономим время."
@@ -310,7 +284,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                     await asyncio.sleep(random.uniform(0.5, 1.2))
 
                     logger.info(f"📡 Получение оценок ({year}, семестр {term})...")
-                    grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{str(sid)}"
+                    grades_api_url = f"https://platonus.iitu.edu.kz/journal/{year}/{term}/{sid}"
                     response = await client.get(grades_api_url)
                     response.raise_for_status()
 
@@ -347,6 +321,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (401, 403):
                         logger.warning(f"🚨 WAF БЛОКИРОВКА! Код: {e.response.status_code}")
+                    logger.error(f"HTTP ошибка при получении оценок: {e}")
                     return f"❌ Сервер Platonus временно недоступен (Код: {e.response.status_code}). Попробуйте позже.", False
                     
                 except AttributeError as e:

@@ -42,13 +42,12 @@ async def main():
     scheduler.add_job(
         auto_update_grades_task, 
         trigger='cron',
+        # trigger='interval',
         hour="10-22/3", # 8:00-20:00 every 3 hours 
-        minute="0",
+        minute=0,
         kwargs={'bot': bot},
         jitter=600
     )
-
-    
     
     # Запускаем планировщик
     scheduler.start()

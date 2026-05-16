@@ -82,7 +82,7 @@ async def cmd_start(message: Message):
 ''')
         kb = get_login_kb()
 
-    await message.answer(text, reply_markup=kb)
+    await message.answer(text, reply_markup=kb, parse_mode="HTML", disable_web_page_preview=True)
 
 @public_router.message(F.web_app_data)
 async def web_app_data_handler(message: Message):
@@ -197,8 +197,7 @@ async def disable_updates(callback: CallbackQuery, user : User):
 @private_router.message(Command("grades"))
 @private_router.callback_query(F.data == "grades")
 async def cmd_grades(event: CallbackQuery | Message, user: User):
-    user_id = event.from_user.id
-    logger.info(f"Юзер {user_id} запросил оценки.")
+    logger.info(f"Юзер {user.id} запросил оценки.")
     force_update = False
 
     # not event.from_user если сообщение пришло от канала или группы, а не от юзера. И если нет логина в БД — значит, пользователь не авторизовался.
@@ -217,8 +216,8 @@ async def cmd_grades(event: CallbackQuery | Message, user: User):
             now = datetime.now(timezone.utc)
             time_passed = now - user.grades_updated_at
             
-            if time_passed < timedelta(minutes=15):
-                minutes_left = 15 - int(time_passed.total_seconds() / 60)
+            if time_passed < timedelta(minutes=5):
+                minutes_left = 5 - int(time_passed.total_seconds() / 60)
                 # Выкидываем красную плашку и ПРЕРЫВАЕМ функцию!
                 await event.answer(f"⏳ Слишком часто! Повтори попытку через {minutes_left} мин.", show_alert=True)
                 return
@@ -269,11 +268,11 @@ async def cmd_grades(event: CallbackQuery | Message, user: User):
         await msg.edit_text(intro_text, parse_mode="HTML", reply_markup=get_subjects_kb(grades_dict))
 
     except Exception as e:
-        logger.error(f"Не смог спарсить оценки для {user_id}: {e}", exc_info=True)
+        logger.error(f"Не смог спарсить оценки для: {e}", exc_info=True)
         # Если не удалось отредактировать (например, из-за лимитов или ошибок HTML), отправляем новым сообщением
         with contextlib.suppress(BaseException):
             await msg.delete()
-        await event.bot.send_message(chat_id=user_id, text="⚠️ Ошибка при получении оценок.", parse_mode="HTML")
+        await event.bot.send_message(chat_id=event.from_user.id, text="⚠️ Ошибка при получении оценок.", parse_mode="HTML")
 
 @private_router.callback_query(F.data.startswith("subj_"))
 async def show_subject_details(callback: CallbackQuery, user: User):
