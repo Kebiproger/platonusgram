@@ -37,11 +37,15 @@ async def update_single_user_grades(bot: Bot, user: User):
                 if changes:
                     text = "🔔 <b>Изменения в Платонусе!</b>\n\n" + "\n".join(changes)
                     await bot.send_message(user.telegram_id, text, parse_mode="HTML")
-                    
+                    logger.info(f"Отправка уведомления для юзера {user.id}")
                     user.cached_grades = new_grades
                     await user.save(update_fields=["cached_grades"])
+            else:
+                logger.info(f"Оценки для юзера {user.id} не изменились.")
+                
         
         elif new_grades and not old_grades:
+            logger.info(f"Первичная загрузка оценок для юзера {user.id}")
             user.cached_grades = new_grades
             await user.save(update_fields=["cached_grades"])
 

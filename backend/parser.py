@@ -149,7 +149,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
         time_diff = now - user.grades_updated_at
         if not force_update:# Если прошло меньше 1 часа (timedelta(hours=1)) И оценки есть в базе
             if time_diff < timedelta(hours=1) and user.cached_grades:
-                logger.info(f"Студент получил оценки из кэша.")
+                logger.info(f"Студент {user.id} получил оценки из кэша.")
                 # Возвращаем данные и флаг is_cached = True
                 return user.cached_grades, True 
 
@@ -157,7 +157,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
         
         async with platonus_limiter:
         
-            logger.info(f"Студент встал в очередь на парсинг.")
+            logger.info(f"Студент {user.id} встал в очередь на парсинг.")
             
             async with httpx.AsyncClient(
                 cookies=cookies,
@@ -169,7 +169,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
             ) as client:
                 
                 try:
-                    logger.info("📡 Проверяем актуальность сессии (Cookies)...")
+                    logger.info(f"Студент {user.id} проверяет актуальность сессии (Cookies)...")
                     resp = await client.get("https://platonus.iitu.edu.kz/student_register")
                     logger.info(f"DEBUG: register status = {resp.status_code}, url = {resp.url}")
                     await asyncio.sleep(
