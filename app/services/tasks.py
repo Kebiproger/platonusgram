@@ -1,10 +1,10 @@
 from aiogram import Bot
 import logging
 from aiogram.exceptions import TelegramForbiddenError
-from backend.db.models import User
+from app.db.models import User
 import random
 import asyncio
-from backend.parser import get_platonus_grades
+from app.services.parser import get_platonus_grades
 
 logger = logging.getLogger(__name__)
 

@@ -7,9 +7,10 @@ import traceback
 from datetime import datetime, timedelta, timezone
 import httpx
 from bs4 import BeautifulSoup
-from backend.crypto import fernet_decrypt_password
-from backend.db.models import User
+from app.core.crypto import fernet_decrypt_password
+from app.db.models import User
 from aiolimiter import AsyncLimiter
+from typing import Optional, Dict
 
 platonus_limiter = AsyncLimiter(max_rate=2, time_period=1)
 
@@ -29,7 +30,7 @@ def get_semaphore():
     global platonus_semaphore
     # Если семафора еще нет, создаем его (это произойдет только 1 раз!)
     if platonus_semaphore is None:
-        platonus_semaphore = asyncio.Semaphore(20)
+        platonus_semaphore = asyncio.Semaphore(10)  # оптимально для event-loop.Beatifoulsoup синхронный
         logger.info("Семафор для Платонуса успешно инициализирован!")
     
     return platonus_semaphore
@@ -50,37 +51,50 @@ def get_stealth_headers() -> dict:
     }
 
 # Beta function, don't pay attention !
-async def platonus_login(user: User, link: str) -> httpx.Client:
+async def platonus_login(
+    client: httpx.AsyncClient, 
+    user: User, 
+    link: str
+) -> Optional[Dict[str, str]]:
     
-    cookies = json.loads(user.session_cookie) if user.session_cookie else None
+    # 1. Загружаем старые куки (если есть)
+    cookies = json.loads(user.session_cookie) if user.session_cookie else {}
 
-    async with httpx.AsyncClient(cookies=cookies, headers=get_stealth_headers(), timeout=20.0, follow_redirects=True) as client:
-        response = await client.get(link)
+    # 2. Делаем запрос. ВАЖНО: передаем параметр cookies=cookies прямо в метод .get()!
+    # Так куки прикрепятся только к этому конкретному пакету и не смешаются с чужими.
+    response = await client.get(link, cookies=cookies, headers=get_stealth_headers())
 
-        if "AccessDenied" in str(response.url):
-            logger.info("🔑 Сессия устарела или отсутствует. Имитируем ввод логина...")
-            login_payload = {
-                "login": user.login, 
-                "password": fernet_decrypt_password(user.password_enc)
-            }
-            
-            await asyncio.sleep(random.uniform(2.0, 4.5)) # Ждем 2-4 секунды, имитируя действия человека
-            logger.info("🔑 Авторизация...")
-            login_resp = await client.post("https://platonus.iitu.edu.kz/rest/api/login", json=login_payload)
-            login_resp.raise_for_status() 
-            if login_resp.status_code != 200:
-                logger.warning(f"🚨 Ошибка авторизации Код: {login_resp.status_code}")
-                return None
-            
-            logger.info("✅ Успешный вход! Сохраняем новые куки.")
-            
-            current_cookies = {}
-            for cookie in client.cookies.jar:
-                current_cookies[cookie.name] = cookie.value
-            return current_cookies
+    if "AccessDenied" in str(response.url):
+        logger.info(f"🔑 Сессия юзера {user.id} устарела. Имитируем ввод логина...")
         
-        logger.info("🚀 Сессия (Cookies) жива! Логин не потребовался. Экономим время.")
-        return cookies                                                       
+        login_payload = {
+            "login": user.login, 
+            # Твоя функция дешифровки - отличный паттерн!
+            "password": fernet_decrypt_password(user.password_enc) 
+        }
+        
+        await asyncio.sleep(random.uniform(2.0, 4.5))
+        
+        # 3. Делаем POST запрос на логин. 
+        # Здесь мы НЕ передаем старые куки, чтобы получить чистую новую сессию.
+        login_resp = await client.post(
+            "https://platonus.iitu.edu.kz/rest/api/login", 
+            json=login_payload,
+            headers=get_stealth_headers()
+        )
+        
+        if login_resp.status_code != 200:
+            logger.warning(f"🚨 Ошибка авторизации для {user.id}. Код: {login_resp.status_code}")
+            return None
+        
+        logger.info(f"✅ Успешный вход для {user.id}! Возвращаем свежие куки.")
+        
+        # 4. Достаем новые куки не из клиента, а прямо из ОТВЕТА сервера
+        new_cookies = dict(login_resp.cookies)
+        return new_cookies
+    
+    logger.info(f"🚀 Сессия юзера {user.id} жива! Логин не потребовался.")
+    return cookies                                                      
 
 # Beta function, don't pay attention !
 def _parse_schedule_html(html_content: str) -> dict:
@@ -163,7 +177,7 @@ async def get_platonus_grades(user: User, force_update: bool = False) -> tuple[s
                 cookies=cookies,
                 headers=get_stealth_headers(),
                 follow_redirects=True,
-                timeout=httpx.Timeout(20.0),
+                timeout=httpx.Timeout(15.0, connect=5.0), # Устанавливаем таймауты: 15 секунд на весь запрос, 5 секунд на установление соединения
                 http2=True,
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             ) as client:

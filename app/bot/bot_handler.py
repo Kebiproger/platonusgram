@@ -7,14 +7,14 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from aiogram.exceptions import TelegramBadRequest
 
-from backend.crypto import  fernet_encrypt_password, js_decrypt_password
-from bot.keyboards import get_login_kb, get_main_kb, get_subjects_kb, get_back_to_subjects_kb, get_settings_kb
-from backend.db.models import User
-from backend.parser import get_platonus_grades
+from app.core.crypto import  fernet_encrypt_password, js_decrypt_password
+from app.bot.keyboards import get_login_kb, get_main_kb, get_subjects_kb, get_back_to_subjects_kb, get_settings_kb
+from app.db.models import User
+from app.services.parser import get_platonus_grades
 from datetime import timezone, timedelta, datetime
 from zoneinfo import ZoneInfo
 import hashlib
-from bot.middlewares import UserCheckMiddleware
+from app.bot.middlewares import UserCheckMiddleware
 
 
 public_router = Router()

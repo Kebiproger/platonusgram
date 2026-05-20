@@ -4,13 +4,13 @@ import logging
 from aiogram import Bot, Dispatcher
 from tortoise import Tortoise
 
-from bot.bot_handler import public_router, private_router
-from bot.commands import set_bot_commands
-from backend.config import TELEGRAM_TOKEN, setup_logging,init_db
+from app.bot.bot_handler import public_router, private_router
+from app.bot.commands import set_bot_commands
+from app.core.config import TELEGRAM_TOKEN, setup_logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from backend.tasks import auto_update_grades_task
+from app.services.tasks import auto_update_grades_task
 from datetime import timezone, timedelta
-
+from app.db.db_config import init_db
 import os
 
 async def main():
@@ -43,15 +43,15 @@ async def main():
         auto_update_grades_task, 
         trigger='cron',
         # trigger='interval',
-        hour="10-22/3", # 8:00-20:00 every 3 hours 
-        minute=0,
+        hour="8-22/2", # 10:00-22:00 every 3 hours 
+        minute=15,
         kwargs={'bot': bot},
         jitter=600
     )
     
     # Запускаем планировщик
     scheduler.start()
-    logging.info("APScheduler успешно запущен (Режим: 08:00 - 20:00)!")
+    logging.info("APScheduler успешно запущен (Режим: 10:00 - 22:00)!")
     try:
         logging.info("Бот запущен и слушает обновления...")
         await asyncio.gather(

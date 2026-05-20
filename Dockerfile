@@ -20,8 +20,9 @@ COPY requirements.txt .
 # Если pip потребуется скомпилировать asyncpg из исходников — gcc ему поможет.
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt
-
+# Шаг 2: Ставим зависимости, используя BuildKit-кэш (это сильно ускорит процесс)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 # ==========================================
 # ЭТАП 2: Production (Чистовик)
 # Никакого gcc, только минимальная среда
@@ -47,4 +48,4 @@ COPY --chown=app:app . .
 
 USER app
 
-CMD ["python", "-m", "backend.main"]
+CMD ["python", "-m", "app.main"]

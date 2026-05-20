@@ -15,7 +15,7 @@ services:
       - .:/app
       
     # В облаке мы просто запускаем главный файл
-    command: python main.py
+    command: python -m app.main
      
   db-service:
    image: postgres:15-alpine

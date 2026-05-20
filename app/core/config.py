@@ -45,14 +45,3 @@ def setup_logging():
     logging.getLogger("aiogram").addFilter(NoSleepFilter())
     logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-async def init_db(generate_schemas: bool = False):
-    await Tortoise.init(
-        db_url=DB_URL,
-        modules={'models' : ["backend.db.models"]}
-    )
-    if generate_schemas:
-        await Tortoise.generate_schemas()
-    
-    conn = Tortoise.get_connection("default")
-    
-    logger.info("База данных Tortoise инициализирована!")

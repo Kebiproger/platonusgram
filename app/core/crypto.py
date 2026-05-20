@@ -4,7 +4,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from backend.config import FERNET_KEY
+from app.core.config import FERNET_KEY
 
 fernet = Fernet(FERNET_KEY)
 
